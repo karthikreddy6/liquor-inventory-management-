@@ -1,0 +1,139 @@
+{
+    "invoice_meta": {
+        "invoice_number": "ICDC007240126029979",
+        "invoice_date": "24-Jan-2026"
+    },
+    "retailer": {
+        "name": "Jilla Wines",
+        "code": "2500552"
+    },
+    "licensee": {
+        "pan": "BIYPR2039D"
+    },
+    "items": [
+        {
+            "sl_no": 1,
+            "brand_number": "0605",
+            "brand_name": "TI MANSION HOUSE XO BRAN DY",
+            "product_type": "IML",
+            "pack_type": "G",
+            "pack_size_case": 24,
+            "pack_size_quantity_ml": 375,
+            "cases_delivered": 1,
+            "bottles_delivered": 0,
+            "rate_per_case": 6002.0,
+            "unit_rate_per_bottle": 250.08,
+            "total_amount": 6002.0
+        },
+        {
+            "sl_no": 2,
+            "brand_number": "0605",
+            "brand_name": "TI MANSION HOUSE XO BRAN DY",
+            "product_type": "IML",
+            "pack_type": "G",
+            "pack_size_case": 48,
+            "pack_size_quantity_ml": 180,
+            "cases_delivered": 4,
+            "bottles_delivered": 0,
+            "rate_per_case": 5604.0,
+            "unit_rate_per_bottle": 116.75,
+            "total_amount": 22416.0
+        },
+        {
+            "sl_no": 3,
+            "brand_number": "0019",
+            "brand_name": "MCDOWELLS NO 1 LUXURY WHISKY",
+            "product_type": "IML",
+            "pack_type": "G",
+            "pack_size_case": 96,
+            "pack_size_quantity_ml": 90,
+            "cases_delivered": 1,
+            "bottles_delivered": 0,
+            "rate_per_case": 5608.0,
+            "unit_rate_per_bottle": 58.42,
+            "total_amount": 5608.0
+        },
+        {
+            "sl_no": 4,
+            "brand_number": "0258",
+            "brand_name": "SEAGRAM`S IMPERIAL BLUE CLASSIC GRAIN WHISKY",
+            "product_type": "IML",
+            "pack_type": "G",
+            "pack_size_case": 48,
+            "pack_size_quantity_ml": 180,
+            "cases_delivered": 15,
+            "bottles_delivered": 0,
+            "rate_per_case": 6004.0,
+            "unit_rate_per_bottle": 125.08,
+            "total_amount": 90060.0
+        },
+        {
+            "sl_no": 5,
+            "brand_number": "0259",
+            "brand_name": "SEAGRAM`S ROYAL STAG BLENDED WHISKY",
+            "product_type": "IML",
+            "pack_type": "G",
+            "pack_size_case": 96,
+            "pack_size_quantity_ml": 90,
+            "cases_delivered": 1,
+            "bottles_delivered": 0,
+            "rate_per_case": 7208.0,
+            "unit_rate_per_bottle": 75.08,
+            "total_amount": 7208.0
+        },
+        {
+            "sl_no": 6,
+            "brand_number": "0426",
+            "brand_name": "SIGNATURE ULTRA PREMIER GRAIN WHISKY",
+            "product_type": "IML",
+            "pack_type": "P",
+            "pack_size_case": 48,
+            "pack_size_quantity_ml": 180,
+            "cases_delivered": 1,
+            "bottles_delivered": 0,
+            "rate_per_case": 12004.0,
+            "unit_rate_per_bottle": 250.08,
+            "total_amount": 12004.0
+        },
+        {
+            "sl_no": 7,
+            "brand_number": "0546",
+            "brand_name": "8PM PREMIUM BLACK WHISKY",
+            "product_type": "IML",
+            "pack_type": "P",
+            "pack_size_case": 48,
+            "pack_size_quantity_ml": 180,
+            "cases_delivered": 2,
+            "bottles_delivered": 0,
+            "rate_per_case": 7204.0,
+            "unit_rate_per_bottle": 150.08,
+            "total_amount": 14408.0
+        },
+        {
+            "sl_no": 8,
+            "brand_number": "7154",
+            "brand_name": "BLACK WHITE BLENDED SCOTCH WHISKY",
+            "product_type": "IML",
+            "pack_type": "G",
+            "pack_size_case": 12,
+            "pack_size_quantity_ml": 750,
+            "cases_delivered": 1,
+            "bottles_delivered": 0,
+            "rate_per_case": 19101.0,
+            "unit_rate_per_bottle": 1591.75,
+            "total_amount": 19101.0
+        }
+    ],
+    "totals": {
+        "e_challan_amount": 231769.3,
+        "previous_credit": 231769.3,
+        "sub_total": 231769.3,
+        "special_excise_cess": 38880.0,
+        "tcs": 1896.0,
+        "less_this_invoice_value": 189518.6,
+        "retailer_credit_balance": 1474.7,
+        "invoice_value": 176807.0,
+        "mrp_round_off": 12711.6,
+        "net_invoice_value": 189518.6
+    }
+}

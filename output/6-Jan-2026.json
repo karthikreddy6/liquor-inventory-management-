@@ -1,0 +1,111 @@
+{
+    "invoice_meta": {
+        "invoice_number": "ICDC007060126028535",
+        "invoice_date": "06-Jan-2026"
+    },
+    "retailer": {
+        "name": "Jilla Wines",
+        "code": "2500552"
+    },
+    "licensee": {
+        "pan": "BIYPR2039D"
+    },
+    "items": [
+        {
+            "sl_no": 1,
+            "brand_number": "0605",
+            "brand_name": "TI MANSION HOUSE XO BRAN DY",
+            "product_type": "IML",
+            "pack_type": "P",
+            "pack_size_case": 96,
+            "pack_size_quantity_ml": 90,
+            "cases_delivered": 1,
+            "bottles_delivered": 0,
+            "rate_per_case": 5608.0,
+            "unit_rate_per_bottle": 58.42,
+            "total_amount": 5608.0
+        },
+        {
+            "sl_no": 2,
+            "brand_number": "0110",
+            "brand_name": "OFFICER`S CHOICE RESERVE WHISKY",
+            "product_type": "IML",
+            "pack_type": "P",
+            "pack_size_case": 96,
+            "pack_size_quantity_ml": 90,
+            "cases_delivered": 20,
+            "bottles_delivered": 0,
+            "rate_per_case": 5608.0,
+            "unit_rate_per_bottle": 58.42,
+            "total_amount": 112160.0
+        },
+        {
+            "sl_no": 3,
+            "brand_number": "0546",
+            "brand_name": "8PM PREMIUM BLACK WHISKY",
+            "product_type": "IML",
+            "pack_type": "P",
+            "pack_size_case": 48,
+            "pack_size_quantity_ml": 180,
+            "cases_delivered": 10,
+            "bottles_delivered": 0,
+            "rate_per_case": 7204.0,
+            "unit_rate_per_bottle": 150.08,
+            "total_amount": 72040.0
+        },
+        {
+            "sl_no": 4,
+            "brand_number": "0672",
+            "brand_name": "DIAMOND FINE WHISKY",
+            "product_type": "IML",
+            "pack_type": "P",
+            "pack_size_case": 48,
+            "pack_size_quantity_ml": 180,
+            "cases_delivered": 55,
+            "bottles_delivered": 0,
+            "rate_per_case": 3784.0,
+            "unit_rate_per_bottle": 78.83,
+            "total_amount": 208120.0
+        },
+        {
+            "sl_no": 5,
+            "brand_number": "1305",
+            "brand_name": "BREEZER GOLD CRISP WATERMELON MINT FLAVOUR",
+            "product_type": "IML",
+            "pack_type": "G",
+            "pack_size_case": 24,
+            "pack_size_quantity_ml": 275,
+            "cases_delivered": 5,
+            "bottles_delivered": 0,
+            "rate_per_case": 2002.0,
+            "unit_rate_per_bottle": 83.42,
+            "total_amount": 10010.0
+        },
+        {
+            "sl_no": 6,
+            "brand_number": "1307",
+            "brand_name": "BREEZER GOLD EXOTIC JAMAICAN PASSION FLAVOUR",
+            "product_type": "IML",
+            "pack_type": "G",
+            "pack_size_case": 24,
+            "pack_size_quantity_ml": 275,
+            "cases_delivered": 2,
+            "bottles_delivered": 0,
+            "rate_per_case": 2002.0,
+            "unit_rate_per_bottle": 83.42,
+            "total_amount": 4004.0
+        }
+    ],
+    "totals": {
+        "e_challan_amount": 510000.0,
+        "previous_credit": 759.45,
+        "sub_total": 510759.45,
+        "special_excise_cess": 38880.0,
+        "tcs": 4645.0,
+        "less_this_invoice_value": 464451.6,
+        "retailer_credit_balance": 2782.85,
+        "invoice_value": 411942.0,
+        "mrp_round_off": 52509.6,
+        "net_invoice_value": 464451.6
+    }
+}

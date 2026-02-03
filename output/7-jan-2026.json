@@ -1,0 +1,153 @@
+{
+    "invoice_meta": {
+        "invoice_number": "ICDC007070126028609",
+        "invoice_date": "07-Jan-2026"
+    },
+    "retailer": {
+        "name": "Jilla Wines",
+        "code": "2500552"
+    },
+    "licensee": {
+        "pan": "BIYPR2039D"
+    },
+    "items": [
+        {
+            "sl_no": 1,
+            "brand_number": "5117",
+            "brand_name": "HOEGAARDEN BELGIAN WITBIER",
+            "product_type": "Beer",
+            "pack_type": "G",
+            "pack_size_case": 24,
+            "pack_size_quantity_ml": 330,
+            "cases_delivered": 1,
+            "bottles_delivered": 0,
+            "rate_per_case": 5002.0,
+            "unit_rate_per_bottle": 208.42,
+            "total_amount": 5002.0
+        },
+        {
+            "sl_no": 2,
+            "brand_number": "0019",
+            "brand_name": "MCDOWELLS NO 1 LUXURY WHISKY",
+            "product_type": "IML",
+            "pack_type": "G",
+            "pack_size_case": 48,
+            "pack_size_quantity_ml": 180,
+            "cases_delivered": 2,
+            "bottles_delivered": 0,
+            "rate_per_case": 6004.0,
+            "unit_rate_per_bottle": 125.08,
+            "total_amount": 12008.0
+        },
+        {
+            "sl_no": 3,
+            "brand_number": "0110",
+            "brand_name": "OFFICER`S CHOICE RESERVE WHISKY",
+            "product_type": "IML",
+            "pack_type": "P",
+            "pack_size_case": 24,
+            "pack_size_quantity_ml": 375,
+            "cases_delivered": 2,
+            "bottles_delivered": 0,
+            "rate_per_case": 5402.0,
+            "unit_rate_per_bottle": 225.08,
+            "total_amount": 10804.0
+        },
+        {
+            "sl_no": 4,
+            "brand_number": "0110",
+            "brand_name": "OFFICER`S CHOICE RESERVE WHISKY",
+            "product_type": "IML",
+            "pack_type": "P",
+            "pack_size_case": 48,
+            "pack_size_quantity_ml": 180,
+            "cases_delivered": 20,
+            "bottles_delivered": 0,
+            "rate_per_case": 5204.0,
+            "unit_rate_per_bottle": 108.42,
+            "total_amount": 104080.0
+        },
+        {
+            "sl_no": 5,
+            "brand_number": "0110",
+            "brand_name": "OFFICER`S CHOICE RESERVE WHISKY",
+            "product_type": "IML",
+            "pack_type": "P",
+            "pack_size_case": 96,
+            "pack_size_quantity_ml": 90,
+            "cases_delivered": 18,
+            "bottles_delivered": 0,
+            "rate_per_case": 5608.0,
+            "unit_rate_per_bottle": 58.42,
+            "total_amount": 100944.0
+        },
+        {
+            "sl_no": 6,
+            "brand_number": "0259",
+            "brand_name": "SEAGRAM`S ROYAL STAG BLENDED WHISKY",
+            "product_type": "IML",
+            "pack_type": "G",
+            "pack_size_case": 96,
+            "pack_size_quantity_ml": 90,
+            "cases_delivered": 1,
+            "bottles_delivered": 0,
+            "rate_per_case": 7208.0,
+            "unit_rate_per_bottle": 75.08,
+            "total_amount": 7208.0
+        },
+        {
+            "sl_no": 7,
+            "brand_number": "0259",
+            "brand_name": "SEAGRAM`S ROYAL STAG BLENDED WHISKY",
+            "product_type": "IML",
+            "pack_type": "G",
+            "pack_size_case": 24,
+            "pack_size_quantity_ml": 375,
+            "cases_delivered": 5,
+            "bottles_delivered": 0,
+            "rate_per_case": 7402.0,
+            "unit_rate_per_bottle": 308.42,
+            "total_amount": 37010.0
+        },
+        {
+            "sl_no": 8,
+            "brand_number": "0546",
+            "brand_name": "8PM PREMIUM BLACK WHISKY",
+            "product_type": "IML",
+            "pack_type": "G",
+            "pack_size_case": 24,
+            "pack_size_quantity_ml": 375,
+            "cases_delivered": 1,
+            "bottles_delivered": 0,
+            "rate_per_case": 7402.0,
+            "unit_rate_per_bottle": 308.42,
+            "total_amount": 7402.0
+        },
+        {
+            "sl_no": 9,
+            "brand_number": "7154",
+            "brand_name": "BLACK WHITE BLENDED SCOTCH WHISKY",
+            "product_type": "IML",
+            "pack_type": "G",
+            "pack_size_case": 24,
+            "pack_size_quantity_ml": 375,
+            "cases_delivered": 1,
+            "bottles_delivered": 0,
+            "rate_per_case": 19202.0,
+            "unit_rate_per_bottle": 800.08,
+            "total_amount": 19202.0
+        }
+    ],
+    "totals": {
+        "e_challan_amount": 390000.0,
+        "previous_credit": 2782.85,
+        "sub_total": 392782.85,
+        "special_excise_cess": 54000.0,
+        "tcs": 3346.0,
+        "less_this_invoice_value": 334548.0,
+        "retailer_credit_balance": 888.85,
+        "invoice_value": 303660.0,
+        "mrp_round_off": 30888.0,
+        "net_invoice_value": 334548.0
+    }
+}
