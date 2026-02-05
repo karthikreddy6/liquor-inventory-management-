@@ -1,12 +1,12 @@
 from flask import Blueprint, jsonify
 from database import SessionLocal
 from models import PresentStockDetail, StockSummary
-from auth import jwt_required
+from auth import auth_required
 
 stock_bp = Blueprint("stock", __name__)
 
 @stock_bp.route("/stock", methods=["GET"])
-@jwt_required(roles=["owner", "supervisor"])
+@auth_required()
 def get_stock():
     db = SessionLocal()
     try:

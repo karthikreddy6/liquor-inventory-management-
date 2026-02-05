@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from flask import request, Response
 import jwt
+import base64
+from functools import wraps
 from config import (
     ADMIN_USER,
     ADMIN_PASS,
@@ -12,19 +14,6 @@ from config import (
     SUPERVISOR_USER,
     SUPERVISOR_PASS,
 )
-
-def admin_required(fn):
-    def wrapper(*args, **kwargs):
-        auth = request.authorization
-        if not auth or auth.username != ADMIN_USER or auth.password != ADMIN_PASS:
-            return Response(
-                "Unauthorized",
-                401,
-                {"WWW-Authenticate": 'Basic realm="Admin"'}
-            )
-        return fn(*args, **kwargs)
-    wrapper.__name__ = fn.__name__
-    return wrapper
 
 def _get_users():
     return {
@@ -51,26 +40,58 @@ def create_token(username: str, role: str) -> str:
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
-def jwt_required(roles=None):
-    roles = roles or []
+def get_auth_mode():
+    """Helper to detect auth type from header"""
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Basic "): return "basic"
+    if auth_header.startswith("Bearer "): return "jwt"
+    return None
+
+def auth_required(roles=None):
+    """
+    Unified Decorator:
+    1. Checks for Basic Auth (Admin)
+    2. Fallback to JWT (Owner/Supervisor)
+    """
+    roles = roles or ["owner", "supervisor"]
     def decorator(fn):
+        @wraps(fn)
         def wrapper(*args, **kwargs):
-            auth = request.headers.get("Authorization", "")
-            if not auth.startswith("Bearer "):
-                return {"error": "Missing or invalid Authorization header"}, 401
-            token = auth.split(" ", 1)[1].strip()
-            try:
-                payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-            except Exception:
-                return {"error": "Invalid or expired token"}, 401
-            role = payload.get("role")
-            if roles and role not in roles:
-                return {"error": "Forbidden"}, 403
-            request.user = {
-                "username": payload.get("sub"),
-                "role": role
-            }
-            return fn(*args, **kwargs)
-        wrapper.__name__ = fn.__name__
+            auth_header = request.headers.get("Authorization", "")
+            
+            # 1. Try Basic Auth (Admin)
+            if auth_header.startswith("Basic "):
+                try:
+                    encoded = auth_header.split(" ", 1)[1]
+                    decoded = base64.b64decode(encoded).decode("utf-8")
+                    u, p = decoded.split(":", 1)
+                    if u == ADMIN_USER and p == ADMIN_PASS:
+                        request.user = {"username": u, "role": "admin"}
+                        return fn(*args, **kwargs)
+                except: pass
+                return Response("Invalid Admin Credentials", 401, {"WWW-Authenticate": 'Basic realm="Admin"'})
+
+            # 2. Try JWT (Staff)
+            if auth_header.startswith("Bearer "):
+                token = auth_header.split(" ", 1)[1].strip()
+                try:
+                    payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+                    role = payload.get("role")
+                    if roles and role not in roles and role != "admin":
+                        return {"error": "Forbidden"}, 403
+                    request.user = {"username": payload.get("sub"), "role": role}
+                    return fn(*args, **kwargs)
+                except:
+                    return {"error": "Invalid or expired token"}, 401
+
+            return {"error": "Missing or invalid Authorization header"}, 401
         return wrapper
     return decorator
+
+
+def jwt_required(roles=None):
+    """
+    Backwards-compatible alias for routes still using jwt_required.
+    Uses the unified auth_required under the hood.
+    """
+    return auth_required(roles=roles)

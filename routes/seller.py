@@ -2,12 +2,12 @@ from flask import Blueprint, request, jsonify
 from database import SessionLocal
 from models import PresentStockDetail
 from services.stock_service import recalc_stock_summary
-from auth import jwt_required
+from auth import auth_required
 
 seller_bp = Blueprint("seller", __name__)
 
 @seller_bp.route("/seller/stock-update", methods=["POST"])
-@jwt_required(roles=["owner", "supervisor"])
+@auth_required()
 def seller_stock_update():
     payload = request.get_json(silent=True) or {}
     available_cases = payload.get("available_cases", None)

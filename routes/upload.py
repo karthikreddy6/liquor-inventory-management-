@@ -7,13 +7,13 @@ from models import Invoice, InvoiceItem, InvoiceTotals, PresentStockDetail, Stoc
 from pdf_parser import parse_invoice_pdf
 from config import INVOICES_FOLDER
 from services.files import save_invoice_file
-from auth import jwt_required
+from auth import auth_required
 from services.audit import log_action
 
 upload_bp = Blueprint("upload", __name__)
 
 @upload_bp.route("/upload", methods=["POST"])
-@jwt_required(roles=["owner", "supervisor"])
+@auth_required()
 def upload_pdf():
     if "file" not in request.files:
         return {"error": "No file"}, 400

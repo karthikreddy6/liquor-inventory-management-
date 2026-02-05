@@ -9,7 +9,7 @@ import os
 from database import SessionLocal
 from models import PresentStockDetail, Invoice, InvoiceItem, SellReport, PriceListItem, SellFinance, SellFinanceExpense
 from services.stock_service import recalc_stock_summary
-from auth import jwt_required
+from auth import auth_required
 from services.audit import log_action
 
 sales_bp = Blueprint("sales", __name__)
@@ -135,7 +135,7 @@ def _parse_report_date(val):
 
 
 @sales_bp.route("/seller/sell-report/prepare", methods=["GET"])
-@jwt_required(roles=["owner", "supervisor"])
+@auth_required()
 def prepare_sell_report():
     db = SessionLocal()
     try:
@@ -183,7 +183,7 @@ def prepare_sell_report():
 
 
 @sales_bp.route("/seller/sell-report", methods=["POST"])
-@jwt_required(roles=["supervisor"])
+@auth_required(roles=["supervisor"])
 def create_sell_report():
     payload = request.get_json(silent=True) or {}
     items = payload.get("items", [])
@@ -337,7 +337,7 @@ def create_sell_report():
 
 
 @sales_bp.route("/seller/sell-report/edit-last", methods=["POST"])
-@jwt_required(roles=["owner"])
+@auth_required(roles=["owner"])
 def edit_last_sell_report():
     payload = request.get_json(silent=True) or {}
     items = payload.get("items", [])
@@ -471,7 +471,7 @@ def edit_last_sell_report():
 
 
 @sales_bp.route("/seller/sell-finance", methods=["POST"])
-@jwt_required(roles=["owner", "supervisor"])
+@auth_required()
 def create_sell_finance():
     payload = request.get_json(silent=True) or {}
     report_date = payload.get("report_date")
@@ -582,7 +582,7 @@ def create_sell_finance():
 
 
 @sales_bp.route("/seller/sell-finance/prepare", methods=["GET"])
-@jwt_required(roles=["owner", "supervisor"])
+@auth_required()
 def prepare_sell_finance():
     report_date = request.args.get("report_date")
     if not report_date:
