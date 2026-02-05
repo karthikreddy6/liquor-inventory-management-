@@ -1,2 +1,3 @@
-# liquor-inventory-management-
-it traces the stoke of liquor inventory 
+# Liquor Inventory Management
+
+React UI for the liquor inventory system.
