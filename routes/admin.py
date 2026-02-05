@@ -353,6 +353,59 @@ def admin_status():
         "uptime_seconds": int(time.time() - APP_START_TIME)
     })
 
+
+@admin_bp.route("/dashboard/summary", methods=["GET"])
+@admin_or_staff_required
+def dashboard_summary():
+    db = SessionLocal()
+    try:
+        last_finance = db.query(SellFinance).order_by(SellFinance.created_at.desc()).first()
+        last_uncleared_amount = float(last_finance.final_balance or 0.0) if last_finance else 0.0
+
+        last_invoice = db.query(Invoice).order_by(Invoice.id.desc()).first()
+        last_invoice_date = last_invoice.invoice_date if last_invoice else ""
+        last_invoice_number = last_invoice.invoice_number if last_invoice else ""
+
+        last_invoice_value = 0.0
+        last_retailer_credit = 0.0
+        if last_invoice:
+            totals = db.query(InvoiceTotals).filter(
+                InvoiceTotals.invoice_number == last_invoice.invoice_number
+            ).first()
+            if totals:
+                last_invoice_value = float(totals.net_invoice_value or 0.0)
+                last_retailer_credit = float(totals.retailer_credit_balance or 0.0)
+
+        total_present_stock = db.query(
+            func.coalesce(func.sum(PresentStockDetail.total_cases), 0)
+        ).scalar()
+        total_present_stock = int(total_present_stock or 0)
+
+        summary = db.query(StockSummary).first()
+        total_present_stock_mrp_value = float(summary.total_price_all_items or 0.0) if summary else 0.0
+
+        last_report = db.query(SellReport).order_by(SellReport.created_at.desc()).first()
+        last_report_date = last_report.report_date if last_report else ""
+        last_sell_report_value = 0.0
+        if last_report_date:
+            last_sell_report_value = db.query(
+                func.coalesce(func.sum(SellReport.sell_amount), 0.0)
+            ).filter(SellReport.report_date == last_report_date).scalar()
+
+        return jsonify({
+            "last_uncleared_amount": last_uncleared_amount,
+            "last_invoice_date": last_invoice_date,
+            "last_invoice_number": last_invoice_number,
+            "last_invoice_value": last_invoice_value,
+            "last_invoice_retailer_credit_balance": last_retailer_credit,
+            "total_present_stock": total_present_stock,
+            "total_present_stock_mrp_value": total_present_stock_mrp_value,
+            "last_sell_report_date": last_report_date,
+            "last_sell_report_value": float(last_sell_report_value or 0.0)
+        })
+    finally:
+        db.close()
+
 # --- System Logs (Option 2 ONLY) ---
 
 @admin_bp.route("/admin/audit-logs", methods=["GET"])
