@@ -1,0 +1,159 @@
+{
+  "report_date": "03-Jan-2026",
+  "items": [
+    {
+      "stock_id": 1,
+      "sold_cases": 199,
+      "sold_bottles": 11,
+      "sell_amount": 431820.0,
+      "mrp": 180.0
+    },
+    {
+      "stock_id": 2,
+      "sold_cases": 24,
+      "sold_bottles": 11,
+      "sell_amount": 56810.0,
+      "mrp": 190.0
+    },
+    {
+      "stock_id": 3,
+      "sold_cases": 49,
+      "sold_bottles": 11,
+      "sell_amount": 113810.0,
+      "mrp": 190.0
+    },
+    {
+      "stock_id": 4,
+      "sold_cases": 0,
+      "sold_bottles": 23,
+      "sell_amount": 5750.0,
+      "mrp": 250.0
+    },
+    {
+      "stock_id": 5,
+      "sold_cases": 0,
+      "sold_bottles": 23,
+      "sell_amount": 9660.0,
+      "mrp": 420.0
+    },
+    {
+      "stock_id": 6,
+      "sold_cases": 0,
+      "sold_bottles": 11,
+      "sell_amount": 9240.0,
+      "mrp": 840.0
+    },
+    {
+      "stock_id": 7,
+      "sold_cases": 0,
+      "sold_bottles": 47,
+      "sell_amount": 9870.0,
+      "mrp": 210.0
+    },
+    {
+      "stock_id": 8,
+      "sold_cases": 0,
+      "sold_bottles": 23,
+      "sell_amount": 10120.0,
+      "mrp": 440.0
+    },
+    {
+      "stock_id": 9,
+      "sold_cases": 1,
+      "sold_bottles": 47,
+      "sell_amount": 20900.0,
+      "mrp": 220.0
+    },
+    {
+      "stock_id": 10,
+      "sold_cases": 19,
+      "sold_bottles": 47,
+      "sell_amount": 153440.0,
+      "mrp": 160.0
+    },
+    {
+      "stock_id": 11,
+      "sold_cases": 7,
+      "sold_bottles": 95,
+      "sell_amount": 69030.0,
+      "mrp": 90.0
+    },
+    {
+      "stock_id": 12,
+      "sold_cases": 9,
+      "sold_bottles": 95,
+      "sell_amount": 95900.0,
+      "mrp": 100.0
+    },
+    {
+      "stock_id": 13,
+      "sold_cases": 19,
+      "sold_bottles": 47,
+      "sell_amount": 182210.0,
+      "mrp": 190.0
+    },
+    {
+      "stock_id": 14,
+      "sold_cases": 19,
+      "sold_bottles": 47,
+      "sell_amount": 210980.0,
+      "mrp": 220.0
+    },
+    {
+      "stock_id": 15,
+      "sold_cases": 1,
+      "sold_bottles": 47,
+      "sell_amount": 32300.0,
+      "mrp": 340.0
+    },
+    {
+      "stock_id": 16,
+      "sold_cases": 0,
+      "sold_bottles": 8,
+      "sell_amount": 14320.0,
+      "mrp": 1790.0
+    },
+    {
+      "stock_id": 17,
+      "sold_cases": 0,
+      "sold_bottles": 23,
+      "sell_amount": 16790.0,
+      "mrp": 730.0
+    },
+    {
+      "stock_id": 18,
+      "sold_cases": 0,
+      "sold_bottles": 47,
+      "sell_amount": 16920.0,
+      "mrp": 360.0
+    },
+    {
+      "stock_id": 20,
+      "sold_cases": 0,
+      "sold_bottles": 11,
+      "sell_amount": 9680.0,
+      "mrp": 880.0
+    },
+    {
+      "stock_id": 21,
+      "sold_cases": 0,
+      "sold_bottles": 47,
+      "sell_amount": 10340.0,
+      "mrp": 220.0
+    },
+    {
+      "stock_id": 22,
+      "sold_cases": 0,
+      "sold_bottles": 11,
+      "sell_amount": 8360.0,
+      "mrp": 760.0
+    },
+    {
+      "stock_id": 23,
+      "sold_cases": 0,
+      "sold_bottles": 11,
+      "sell_amount": 22000.0,
+      "mrp": 2000.0
+    }
+  ]
+}

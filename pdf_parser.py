@@ -41,7 +41,7 @@ def extract_amount_by_label(label, text):
 
 
 # ---------------- INVOICE VALUES FROM TABLE ----------------
-def extract_invoice_values_from_table(pdf):
+def extract_invoice_values_from_table(pdf, text=None):
     values = {
         "invoice_value": 0.0,
         "mrp_round_off": 0.0,
@@ -78,6 +78,47 @@ def extract_invoice_values_from_table(pdf):
                     values["net_invoice_value"] = parts[2]
 
                 return values
+
+    if text:
+        # Fallbacks when table extraction doesn't contain the values
+        if values["mrp_round_off"] == 0.0:
+            m = re.search(r"MRP\s*([\d,]+\.\d{2})", text, re.IGNORECASE)
+            if m:
+                values["mrp_round_off"] = clean_amount(m.group(1))
+            else:
+                m = re.search(r"Rounding\s*Off[:\s]*([\d,]+\.\d{2})", text, re.IGNORECASE)
+                if m:
+                    values["mrp_round_off"] = clean_amount(m.group(1))
+
+        if values["net_invoice_value"] == 0.0:
+            m = re.search(r"Net\s*Invoice\s*Value[:\s]*([\d,]+\.\d{2})", text, re.IGNORECASE)
+            if m:
+                values["net_invoice_value"] = clean_amount(m.group(1))
+            else:
+                # Look around "Net Invoice" line and capture nearest amount above it
+                lines = text.splitlines()
+                net_idx = None
+                for i, line in enumerate(lines):
+                    if re.search(r"Net\s*Invoice", line, re.IGNORECASE):
+                        net_idx = i
+                        break
+                if net_idx is not None:
+                    for j in range(net_idx - 1, max(-1, net_idx - 6), -1):
+                        m2 = re.search(r"[\d,]+\.\d{2}", lines[j])
+                        if m2:
+                            values["net_invoice_value"] = clean_amount(m2.group(0))
+                            break
+
+        if values["invoice_value"] == 0.0:
+            m = re.search(r"Invoice\s*Value[:\s]*([\d,]+\.\d{2})", text, re.IGNORECASE)
+            if m:
+                values["invoice_value"] = clean_amount(m.group(1))
+
+        # If net + mrp present, prefer invoice value = net - mrp (common layout)
+        if values["net_invoice_value"] != 0.0 and values["mrp_round_off"] != 0.0:
+            values["invoice_value"] = values["net_invoice_value"] - values["mrp_round_off"]
+        elif values["invoice_value"] == 0.0 and values["net_invoice_value"] != 0.0:
+            values["invoice_value"] = values["net_invoice_value"]
 
     return values
 
@@ -203,7 +244,7 @@ def parse_invoice_pdf(pdf_path: str):
 
         # -------- TOTALS --------
         invoice["totals"] = extract_totals_block(text)
-        invoice["totals"].update(extract_invoice_values_from_table(pdf))
+        invoice["totals"].update(extract_invoice_values_from_table(pdf, text))
 
     # -------- SAVE JSON FILE --------
     base = os.path.basename(pdf_path)

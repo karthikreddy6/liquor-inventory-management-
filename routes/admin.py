@@ -22,6 +22,8 @@ from auth import jwt_required
 from config import APP_START_TIME, ADMIN_USER, ADMIN_PASS
 from services.pdf_export import write_invoice_pdf, write_sell_report_pdf
 from services.audit import log_action, update_last_login
+from services.stock_service import recalc_stock_summary
+from models import PriceListItem
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -92,6 +94,76 @@ def admin_basic_required(fn):
                 return fn(*args, **kwargs)
         return Response("Unauthorized: Basic Auth Required", 401, {"WWW-Authenticate": 'Basic realm="Admin"'})
     return wrapper
+
+
+def _rebuild_stock_from_invoices(db):
+    # Rebuild present stock entirely from remaining invoice items
+    db.query(PresentStockDetail).delete()
+    summary = db.query(StockSummary).first()
+    if not summary:
+        summary = StockSummary(total_cases_all_items=0, total_price_all_items=0.0)
+        db.add(summary)
+        db.flush()
+    summary.total_cases_all_items = 0
+    summary.total_price_all_items = 0.0
+    summary.last_updated_item_name = ""
+
+    mrp_map = {}
+    for r in db.query(PriceListItem).all():
+        key = (str(r.brand_number or "").strip(), str(r.pack_type or "").strip(), int(r.volume_ml or 0))
+        if key not in mrp_map:
+            mrp_map[key] = float(r.mrp or 0.0)
+
+    invoices = db.query(Invoice).order_by(Invoice.id.asc()).all()
+    invoice_date_map = {inv.invoice_number: inv.invoice_date for inv in invoices}
+
+    items = db.query(InvoiceItem).order_by(InvoiceItem.id.asc()).all()
+    stock_map = {}
+    for it in items:
+        key = (it.brand_number, it.pack_size_case, it.pack_size_quantity_ml)
+        pack_size = int(it.pack_size_case or 0)
+        cases = int(it.cases_delivered or 0)
+        bottles = int(it.bottles_delivered or 0)
+        total_bottles = cases * pack_size + bottles
+
+        mrp_key = (str(it.brand_number or "").strip(), str(it.pack_type or "").strip(), int(it.pack_size_quantity_ml or 0))
+        mrp = mrp_map.get(mrp_key)
+        unit_rate = float(mrp) if mrp is not None else None
+        rate_per_case = float(mrp) * float(pack_size) if (mrp is not None and pack_size) else None
+        total_amount = float(mrp) * float(total_bottles) if mrp is not None else 0.0
+
+        if key not in stock_map:
+            stock_map[key] = {
+                "brand_number": it.brand_number,
+                "brand_name": it.brand_name,
+                "product_type": it.product_type,
+                "pack_type": it.pack_type,
+                "pack_size_case": it.pack_size_case,
+                "pack_size_quantity_ml": it.pack_size_quantity_ml,
+                "total_cases": 0,
+                "total_bottles": 0,
+                "rate_per_case": rate_per_case,
+                "unit_rate_per_bottle": unit_rate,
+                "total_amount": 0.0,
+                "last_invoice_date": invoice_date_map.get(it.invoice_number, ""),
+            }
+
+        entry = stock_map[key]
+        entry["total_cases"] += cases
+        entry["total_bottles"] += total_bottles
+        entry["total_amount"] += total_amount
+        entry["rate_per_case"] = rate_per_case or entry.get("rate_per_case")
+        entry["unit_rate_per_bottle"] = unit_rate or entry.get("unit_rate_per_bottle")
+        entry["last_invoice_date"] = invoice_date_map.get(it.invoice_number, entry["last_invoice_date"])
+
+        item_display = f"{it.brand_name or ''} {it.pack_size_quantity_ml or 0}ml/{it.pack_size_case or 0}"
+        entry["last_updated_item_name"] = item_display
+
+    for entry in stock_map.values():
+        db.add(PresentStockDetail(**entry))
+        summary.total_cases_all_items += entry["total_cases"] or 0
+        summary.total_price_all_items += entry["total_amount"] or 0.0
+        summary.last_updated_item_name = entry.get("last_updated_item_name") or summary.last_updated_item_name
 
 # --- Information Endpoints (Option 1 & 2) ---
 
@@ -453,12 +525,18 @@ def get_user_logins():
 def delete_sell_report(report_date):
     db = SessionLocal()
     try:
-        db.query(SellReport).filter(SellReport.report_date == report_date).delete()
+        rows = db.query(SellReport).filter(SellReport.report_date == report_date).all()
+        if not rows:
+            return {"error": "sell report not found"}, 404
+        for r in rows:
+            db.delete(r)
+
         fin = db.query(SellFinance).filter(SellFinance.report_date == report_date).first()
         if fin:
             db.query(SellFinanceExpense).filter(SellFinanceExpense.finance_id == fin.id).delete()
             db.delete(fin)
         log_action(db, request.user, "DELETE_SELL_REPORT", "sell_report", report_date)
+        _rebuild_stock_from_invoices(db)
         db.commit()
         return jsonify({"status": "ok", "message": f"Deleted report for {report_date}"})
     except Exception as e:
@@ -476,6 +554,7 @@ def delete_invoice(invoice_number):
         db.query(InvoiceTotals).filter(InvoiceTotals.invoice_number == invoice_number).delete()
         db.query(Invoice).filter(Invoice.invoice_number == invoice_number).delete()
         log_action(db, request.user, "DELETE_INVOICE", "invoice", invoice_number)
+        _rebuild_stock_from_invoices(db)
         db.commit()
         return jsonify({"status": "ok"})
     except Exception as e:

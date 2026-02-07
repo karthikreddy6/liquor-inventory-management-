@@ -258,8 +258,8 @@
         "tcs": 6983.0,
         "less_this_invoice_value": 698229.0,
         "retailer_credit_balance": 1752.72,
-        "invoice_value": 0.0,
-        "mrp_round_off": 0.0,
-        "net_invoice_value": 0.0
+        "invoice_value": 656055.0,
+        "mrp_round_off": 42174.0,
+        "net_invoice_value": 698229.0
     }
 }
