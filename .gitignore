@@ -1,2 +1,3 @@
-invoices/
-output/
+# invoices/
+# output/
+# inventory_management.db

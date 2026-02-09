@@ -32,6 +32,7 @@ class InvoiceTotals(Base):
     invoice_value = Column(Float)
     mrp_round_off = Column(Float)
     net_invoice_value = Column(Float)
+    total_invoice_value = Column(Float)
 
 class InvoiceItem(Base):
     __tablename__ = "invoice_items"

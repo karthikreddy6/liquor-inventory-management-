@@ -12,6 +12,31 @@ from services.audit import log_action
 
 upload_bp = Blueprint("upload", __name__)
 
+@upload_bp.route("/upload/preview", methods=["POST"])
+@auth_required()
+def upload_preview():
+    if "file" not in request.files:
+        return {"error": "No file"}, 400
+
+    file = request.files["file"]
+    filename = secure_filename(file.filename)
+    temp_dir = os.path.join("output", "preview")
+    os.makedirs(temp_dir, exist_ok=True)
+    temp_path = os.path.join(temp_dir, filename)
+    file.save(temp_path)
+
+    try:
+        data = parse_invoice_pdf(temp_path)
+        retailer_code = str(data.get("retailer", {}).get("code", "")).strip()
+        if retailer_code != "2500552":
+            return {"error": "Retailer code mismatch. Expected 2500552."}, 400
+        return jsonify({"preview": data})
+    finally:
+        try:
+            os.remove(temp_path)
+        except Exception:
+            pass
+
 @upload_bp.route("/upload", methods=["POST"])
 @auth_required()
 def upload_pdf():
@@ -64,7 +89,8 @@ def upload_pdf():
             retailer_credit_balance=totals_data.get("retailer_credit_balance", 0.0),
             invoice_value=totals_data.get("invoice_value", 0.0),
             mrp_round_off=totals_data.get("mrp_round_off", 0.0),
-            net_invoice_value=totals_data.get("net_invoice_value", 0.0)
+            net_invoice_value=totals_data.get("net_invoice_value", 0.0),
+            total_invoice_value=totals_data.get("total_invoice_value", 0.0)
         )
         db.add(totals)
 

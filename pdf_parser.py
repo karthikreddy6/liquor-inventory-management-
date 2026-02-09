@@ -245,6 +245,11 @@ def parse_invoice_pdf(pdf_path: str):
         # -------- TOTALS --------
         invoice["totals"] = extract_totals_block(text)
         invoice["totals"].update(extract_invoice_values_from_table(pdf, text))
+        invoice["totals"]["total_invoice_value"] = (
+            float(invoice["totals"].get("net_invoice_value", 0.0))
+            + float(invoice["totals"].get("special_excise_cess", 0.0))
+            + float(invoice["totals"].get("tcs", 0.0))
+        )
 
     # -------- SAVE JSON FILE --------
     base = os.path.basename(pdf_path)

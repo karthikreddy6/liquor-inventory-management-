@@ -445,7 +445,7 @@ def dashboard_summary():
                 InvoiceTotals.invoice_number == last_invoice.invoice_number
             ).first()
             if totals:
-                last_invoice_value = float(totals.net_invoice_value or 0.0)
+                last_invoice_value = float(totals.total_invoice_value or 0.0)
                 last_retailer_credit = float(totals.retailer_credit_balance or 0.0)
 
         total_present_stock = db.query(
