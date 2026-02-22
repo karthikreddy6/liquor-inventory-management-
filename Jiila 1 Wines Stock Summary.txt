@@ -1,0 +1,72 @@
+JIILA 1 WINES STOCK - TEXT SUMMARY
+========================================
+Source: Jiila 1 Wines Stock.pdf
+Invoice No: 113
+Invoice Date: 30-Nov-2025
+Location: Suryapet
+
+TOTALS
+----------------------------------------
+Total line items : 41
+Total quantity   : 3,525 No's
+Total value      : Rs. 708,690.00
+
+TOP 5 BY QUANTITY
+----------------------------------------
+1. O C W 90 Ml | Qty: 1,171 | Amount: Rs. 105,390.00
+2. Hay 5000 650 ML | Qty: 984 | Amount: Rs. 186,960.00
+3. K F Strong 650 Ml | Qty: 436 | Amount: Rs. 82,840.00
+4. K F Lager 650 ML | Qty: 163 | Amount: Rs. 29,340.00
+5. R Stage 90Ml | Qty: 134 | Amount: Rs. 16,080.00
+
+TOP 5 BY AMOUNT
+----------------------------------------
+1. Hay 5000 650 ML | Qty: 984 | Amount: Rs. 186,960.00
+2. O C W 90 Ml | Qty: 1,171 | Amount: Rs. 105,390.00
+3. K F Strong 650 Ml | Qty: 436 | Amount: Rs. 82,840.00
+4. M H W Qts | Qty: 83 | Amount: Rs. 76,360.00
+5. K F Lager 650 ML | Qty: 163 | Amount: Rs. 29,340.00
+
+FULL ITEM LIST
+----------------------------------------
+ 1. 100 Pipres Qrs | Qty: 9 | Rate: Rs. 2,160.00 | Amount: Rs. 19,440.00
+ 2. 8 Pm Whisky Nips | Qty: 4 | Rate: Rs. 220.00 | Amount: Rs. 880.00
+ 3. 8 Pm Whisky Pints | Qty: 21 | Rate: Rs. 440.00 | Amount: Rs. 9,240.00
+ 4. 8 Pm Whisky Qts | Qty: 10 | Rate: Rs. 880.00 | Amount: Rs. 8,800.00
+ 5. Antiquity Blue Nips | Qty: 11 | Rate: Rs. 360.00 | Amount: Rs. 3,960.00
+ 6. Antiquity Blue Qts | Qty: 5 | Rate: Rs. 1,450.00 | Amount: Rs. 7,250.00
+ 7. Artic Pure Green Vodka Qts | Qty: 3 | Rate: Rs. 1,520.00 | Amount: Rs. 4,560.00
+ 8. Artic Pure Vodka Qts | Qty: 2 | Rate: Rs. 1,520.00 | Amount: Rs. 3,040.00
+ 9. Black & White Qts | Qty: 6 | Rate: Rs. 2,080.00 | Amount: Rs. 12,480.00
+10. B S P Reserve Qts | Qty: 2 | Rate: Rs. 1,560.00 | Amount: Rs. 3,120.00
+11. B S Pride Nips | Qty: 4 | Rate: Rs. 340.00 | Amount: Rs. 1,360.00
+12. Cheep Nips | Qty: 66 | Rate: Rs. 110.00 | Amount: Rs. 7,260.00
+13. Hay 5000 650 ML | Qty: 984 | Rate: Rs. 190.00 | Amount: Rs. 186,960.00
+14. I B 90 ML | Qty: 31 | Rate: Rs. 100.00 | Amount: Rs. 3,100.00
+15. I B Nips | Qty: 29 | Rate: Rs. 190.00 | Amount: Rs. 5,510.00
+16. I B Pints | Qty: 18 | Rate: Rs. 380.00 | Amount: Rs. 6,840.00
+17. I B Qts | Qty: 7 | Rate: Rs. 760.00 | Amount: Rs. 5,320.00
+18. Iconiq 90 Ml | Qty: 58 | Rate: Rs. 100.00 | Amount: Rs. 5,800.00
+19. K F Lager 650 ML | Qty: 163 | Rate: Rs. 180.00 | Amount: Rs. 29,340.00
+20. K F Strong 650 Ml | Qty: 436 | Rate: Rs. 190.00 | Amount: Rs. 82,840.00
+21. M C W 90 Ml | Qty: 39 | Rate: Rs. 100.00 | Amount: Rs. 3,900.00
+22. M C W Nips | Qty: 39 | Rate: Rs. 190.00 | Amount: Rs. 7,410.00
+23. M C W Pints | Qty: 19 | Rate: Rs. 380.00 | Amount: Rs. 7,220.00
+24. M H W Qts | Qty: 83 | Rate: Rs. 920.00 | Amount: Rs. 76,360.00
+25. O C W 90 Ml | Qty: 1,171 | Rate: Rs. 90.00 | Amount: Rs. 105,390.00
+26. O C W Blue Qts | Qty: 1 | Rate: Rs. 760.00 | Amount: Rs. 760.00
+27. O C W Nips | Qty: 37 | Rate: Rs. 160.00 | Amount: Rs. 5,920.00
+28. O C W Qts | Qty: 21 | Rate: Rs. 640.00 | Amount: Rs. 13,440.00
+29. Oksmith Gold Nips | Qty: 14 | Rate: Rs. 370.00 | Amount: Rs. 5,180.00
+30. Oksmith Gold Pints | Qty: 8 | Rate: Rs. 740.00 | Amount: Rs. 5,920.00
+31. R C Whisky Nips | Qty: 9 | Rate: Rs. 300.00 | Amount: Rs. 2,700.00
+32. R C Whisky Pints | Qty: 3 | Rate: Rs. 600.00 | Amount: Rs. 1,800.00
+33. R Stage 1000 Ml | Qty: 12 | Rate: Rs. 1,180.00 | Amount: Rs. 14,160.00
+34. R Stage 90Ml | Qty: 134 | Rate: Rs. 120.00 | Amount: Rs. 16,080.00
+35. R Stage Nips | Qty: 17 | Rate: Rs. 220.00 | Amount: Rs. 3,740.00
+36. R Stage Pints | Qty: 15 | Rate: Rs. 440.00 | Amount: Rs. 6,600.00
+37. R Stage Qts | Qty: 10 | Rate: Rs. 880.00 | Amount: Rs. 8,800.00
+38. Signature 2000 Ml | Qty: 1 | Rate: Rs. 3,510.00 | Amount: Rs. 3,510.00
+39. Signature Nips | Qty: 18 | Rate: Rs. 340.00 | Amount: Rs. 6,120.00
+40. Signature Qts | Qty: 3 | Rate: Rs. 1,360.00 | Amount: Rs. 4,080.00
+41. Smirnoff Qts | Qty: 2 | Rate: Rs. 1,250.00 | Amount: Rs. 2,500.00
