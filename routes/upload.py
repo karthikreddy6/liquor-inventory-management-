@@ -30,6 +30,15 @@ def upload_preview():
         retailer_code = str(data.get("retailer", {}).get("code", "")).strip()
         if retailer_code != "2500552":
             return {"error": "Retailer code mismatch. Expected 2500552."}, 400
+        invoice_number = data.get("invoice_meta", {}).get("invoice_number", "")
+        if invoice_number:
+            db = SessionLocal()
+            try:
+                exists = db.query(Invoice).filter(Invoice.invoice_number == invoice_number).first()
+                if exists:
+                    return {"error": f"Invoice already exists: {invoice_number}"}, 409
+            finally:
+                db.close()
         return jsonify({"preview": data})
     finally:
         try:

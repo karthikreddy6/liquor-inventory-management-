@@ -7,7 +7,18 @@ import json
 import os
 
 from database import SessionLocal
-from models import PresentStockDetail, Invoice, InvoiceItem, SellReport, PriceListItem, SellFinance, SellFinanceExpense
+from models import (
+    PresentStockDetail,
+    Invoice,
+    InvoiceTotals,
+    InvoiceItem,
+    SellReport,
+    PriceListItem,
+    SellFinance,
+    SellFinanceExpense,
+    SellFinancePhonePay,
+    SellFinanceCash,
+)
 from services.stock_service import recalc_stock_summary
 from auth import auth_required
 from services.audit import log_action
@@ -122,6 +133,61 @@ def _get_last_finance_balance(db, exclude_finance_id=None):
         return 0.0
 
 
+def _build_finance_payload(db, report_date):
+    finance = db.query(SellFinance).filter(SellFinance.report_date == report_date).first()
+    if not finance:
+        return {
+            "exists": False,
+            "report_date": report_date,
+            "total_sell_amount": 0.0,
+            "last_balance_amount": 0.0,
+            "total_amount": 0.0,
+            "upi_phonepay": 0.0,
+            "cash": 0.0,
+            "total_balance": 0.0,
+            "total_expenses": 0.0,
+            "final_balance": 0.0,
+            "phonepay_entries": [],
+            "cash_entries": [],
+            "expenses": []
+        }
+
+    phonepay_rows = db.query(SellFinancePhonePay).filter(
+        SellFinancePhonePay.finance_id == finance.id
+    ).all()
+    cash_rows = db.query(SellFinanceCash).filter(
+        SellFinanceCash.finance_id == finance.id
+    ).all()
+    expense_rows = db.query(SellFinanceExpense).filter(
+        SellFinanceExpense.finance_id == finance.id
+    ).all()
+
+    return {
+        "exists": True,
+        "report_date": finance.report_date,
+        "total_sell_amount": float(finance.total_sell_amount or 0.0),
+        "last_balance_amount": float(finance.last_balance_amount or 0.0),
+        "total_amount": float(finance.total_amount or 0.0),
+        "upi_phonepay": float(finance.upi_phonepay or 0.0),
+        "cash": float(finance.cash or 0.0),
+        "total_balance": float(finance.total_balance or 0.0),
+        "total_expenses": float(finance.total_expenses or 0.0),
+        "final_balance": float(finance.final_balance or 0.0),
+        "phonepay_entries": [
+            {"date": r.txn_date, "amount": float(r.amount or 0.0)}
+            for r in phonepay_rows
+        ],
+        "cash_entries": [
+            {"date": r.txn_date, "amount": float(r.amount or 0.0)}
+            for r in cash_rows
+        ],
+        "expenses": [
+            {"name": r.name, "amount": float(r.amount or 0.0)}
+            for r in expense_rows
+        ]
+    }
+
+
 def _parse_report_date(val):
     if not val:
         return None
@@ -132,6 +198,49 @@ def _parse_report_date(val):
         except Exception:
             continue
     return None
+
+
+def _to_float_amount(value):
+    if value is None:
+        return 0.0
+    if isinstance(value, str):
+        value = value.replace(",", "").strip()
+        if not value:
+            return 0.0
+    return float(value)
+
+
+def _normalize_money_entries(entries, kind, latest_invoice_dt, latest_invoice_date):
+    cleaned = []
+    total = 0.0
+    for idx, entry in enumerate(entries, start=1):
+        row = entry or {}
+        raw_date = str(row.get("date") or row.get("txn_date") or "").strip()
+        raw_amount = row.get("amount", "")
+
+        # Ignore fully empty dynamic form rows.
+        if not raw_date and (raw_amount is None or str(raw_amount).strip() == ""):
+            continue
+        if not raw_date:
+            return None, None, {"error": f"{kind} entry #{idx} date is required"}
+
+        txn_dt = _parse_report_date(raw_date)
+        if not txn_dt:
+            return None, None, {"error": f"invalid {kind} date format in entry #{idx}: {raw_date}"}
+        if txn_dt < latest_invoice_dt:
+            return None, None, {"error": f"{kind} date must be on or after last invoice date: {latest_invoice_date}"}
+
+        try:
+            amount = _to_float_amount(raw_amount)
+        except Exception:
+            return None, None, {"error": f"{kind} entry #{idx} amount must be a number"}
+
+        total += amount
+        cleaned.append({
+            "date": txn_dt.strftime("%Y-%m-%d"),
+            "amount": amount
+        })
+    return cleaned, total, None
 
 
 @sales_bp.route("/seller/sell-report/prepare", methods=["GET"])
@@ -326,12 +435,22 @@ def create_sell_report():
         log_action(db, request.user, "create_sell_report", "sell_report", report_date)
         recalc_stock_summary(db)
         db.commit()
+        finance_payload = _build_finance_payload(db, report_date)
         os.makedirs("output", exist_ok=True)
         safe_date = str(report_date).replace("/", "-").replace("\\", "-")
         out_path = os.path.join("output", f"sell_report_{safe_date}.json")
         with open(out_path, "w", encoding="utf-8") as f:
-            json.dump({"report_date": report_date, "items": created}, f, indent=2)
-        return jsonify({"status": "ok", "report_date": report_date, "items": created})
+            json.dump({
+                "report_date": report_date,
+                "items": created,
+                "finance": finance_payload
+            }, f, indent=2)
+        return jsonify({
+            "status": "ok",
+            "report_date": report_date,
+            "items": created,
+            "finance": finance_payload
+        })
     finally:
         db.close()
 
@@ -478,14 +597,36 @@ def create_sell_finance():
     upi_phonepay = payload.get("upi_phonepay", 0)
     cash = payload.get("cash", 0)
     expenses = payload.get("expenses", [])
+    phonepay_entries = payload.get("phonepay_entries", [])
+    cash_entries = payload.get("cash_entries", [])
 
     if not report_date:
         return {"error": "report_date is required"}, 400
     if not isinstance(expenses, list):
         return {"error": "expenses must be a list"}, 400
+    if not isinstance(phonepay_entries, list):
+        return {"error": "phonepay_entries must be a list"}, 400
+    if not isinstance(cash_entries, list):
+        return {"error": "cash_entries must be a list"}, 400
 
     db = SessionLocal()
     try:
+        SellFinancePhonePay.__table__.create(bind=db.get_bind(), checkfirst=True)
+        SellFinanceCash.__table__.create(bind=db.get_bind(), checkfirst=True)
+
+        latest_invoice = db.query(Invoice).order_by(Invoice.id.desc()).first()
+        if not latest_invoice:
+            return {"error": "no invoices found"}, 400
+        latest_invoice_date = latest_invoice.invoice_date
+        latest_invoice_dt = _parse_report_date(latest_invoice_date)
+        if not latest_invoice_dt:
+            return {"error": "invalid latest invoice date format"}, 400
+        report_dt = _parse_report_date(report_date)
+        if not report_dt:
+            return {"error": "invalid report_date format"}, 400
+        if report_dt < latest_invoice_dt:
+            return {"error": "report_date must be on or after last invoice date"}, 400
+
         sell_report_exists = db.query(SellReport).filter(
             SellReport.report_date == report_date
         ).first()
@@ -499,11 +640,25 @@ def create_sell_finance():
         last_balance_amount = _get_last_finance_balance(db, finance.id if finance else None)
         total_sell_amount = _get_total_sell_amount(db, report_date)
 
-        try:
-            upi_phonepay = float(upi_phonepay or 0.0)
-            cash = float(cash or 0.0)
-        except Exception:
-            return {"error": "upi_phonepay and cash must be numbers"}, 400
+        # Backward compatibility: if old scalar fields are used, convert them to 1-row entries.
+        if not phonepay_entries and (upi_phonepay not in (None, "", 0, 0.0, "0", "0.0")):
+            phonepay_entries = [{"date": report_date, "amount": upi_phonepay}]
+        if not cash_entries and (cash not in (None, "", 0, 0.0, "0", "0.0")):
+            cash_entries = [{"date": report_date, "amount": cash}]
+
+        cleaned_phonepay_entries, phonepay_total, phonepay_err = _normalize_money_entries(
+            phonepay_entries, "phonepay", latest_invoice_dt, latest_invoice_date
+        )
+        if phonepay_err:
+            return phonepay_err, 400
+        cleaned_cash_entries, cash_total, cash_err = _normalize_money_entries(
+            cash_entries, "cash", latest_invoice_dt, latest_invoice_date
+        )
+        if cash_err:
+            return cash_err, 400
+
+        upi_phonepay = phonepay_total
+        cash = cash_total
 
         total_amount = float(total_sell_amount) + float(last_balance_amount)
         total_balance = float(upi_phonepay) + float(cash) - float(total_amount)
@@ -538,6 +693,12 @@ def create_sell_finance():
             db.query(SellFinanceExpense).filter(
                 SellFinanceExpense.finance_id == finance.id
             ).delete()
+            db.query(SellFinancePhonePay).filter(
+                SellFinancePhonePay.finance_id == finance.id
+            ).delete()
+            db.query(SellFinanceCash).filter(
+                SellFinanceCash.finance_id == finance.id
+            ).delete()
         else:
             finance = SellFinance(
                 report_date=report_date,
@@ -562,6 +723,19 @@ def create_sell_finance():
                 amount=exp["amount"]
             ))
 
+        for entry in cleaned_phonepay_entries:
+            db.add(SellFinancePhonePay(
+                finance_id=finance.id,
+                txn_date=entry["date"],
+                amount=entry["amount"]
+            ))
+        for entry in cleaned_cash_entries:
+            db.add(SellFinanceCash(
+                finance_id=finance.id,
+                txn_date=entry["date"],
+                amount=entry["amount"]
+            ))
+
         log_action(db, request.user, "create_sell_finance", "sell_finance", report_date)
         db.commit()
         return jsonify({
@@ -575,6 +749,8 @@ def create_sell_finance():
             "total_balance": total_balance,
             "total_expenses": total_expenses,
             "final_balance": final_balance,
+            "phonepay_entries": cleaned_phonepay_entries,
+            "cash_entries": cleaned_cash_entries,
             "expenses": cleaned_expenses
         })
     finally:
@@ -590,6 +766,11 @@ def prepare_sell_finance():
 
     db = SessionLocal()
     try:
+        SellFinancePhonePay.__table__.create(bind=db.get_bind(), checkfirst=True)
+        SellFinanceCash.__table__.create(bind=db.get_bind(), checkfirst=True)
+
+        latest_invoice = db.query(Invoice).order_by(Invoice.id.desc()).first()
+        latest_invoice_date = latest_invoice.invoice_date if latest_invoice else ""
         sell_report_exists = db.query(SellReport).filter(
             SellReport.report_date == report_date
         ).first()
@@ -599,6 +780,37 @@ def prepare_sell_finance():
         finance = db.query(SellFinance).filter(
             SellFinance.report_date == report_date
         ).first()
+        phonepay_entries = []
+        cash_entries = []
+        if finance:
+            phonepay_rows = db.query(SellFinancePhonePay).filter(
+                SellFinancePhonePay.finance_id == finance.id
+            ).all()
+            phonepay_entries = [
+                {"date": r.txn_date, "amount": float(r.amount or 0.0)}
+                for r in phonepay_rows
+            ]
+            cash_rows = db.query(SellFinanceCash).filter(
+                SellFinanceCash.finance_id == finance.id
+            ).all()
+            cash_entries = [
+                {"date": r.txn_date, "amount": float(r.amount or 0.0)}
+                for r in cash_rows
+            ]
+            # Old records fallback: expose scalar values as single-row entries.
+            if not phonepay_entries and float(finance.upi_phonepay or 0.0) != 0.0:
+                phonepay_entries = [{"date": report_date, "amount": float(finance.upi_phonepay or 0.0)}]
+            if not cash_entries and float(finance.cash or 0.0) != 0.0:
+                cash_entries = [{"date": report_date, "amount": float(finance.cash or 0.0)}]
+        expenses = []
+        if finance:
+            expense_rows = db.query(SellFinanceExpense).filter(
+                SellFinanceExpense.finance_id == finance.id
+            ).all()
+            expenses = [
+                {"name": r.name, "amount": float(r.amount or 0.0)}
+                for r in expense_rows
+            ]
 
         last_balance_amount = _get_last_finance_balance(db, finance.id if finance else None)
         total_sell_amount = _get_total_sell_amount(db, report_date)
@@ -609,7 +821,130 @@ def prepare_sell_finance():
             "total_sell_amount": total_sell_amount,
             "last_balance_amount": last_balance_amount,
             "total_amount": total_amount,
-            "existing_finance": bool(finance)
+            "existing_finance": bool(finance),
+            "upi_phonepay": float(finance.upi_phonepay or 0.0) if finance else 0.0,
+            "cash": float(finance.cash or 0.0) if finance else 0.0,
+            "total_balance": float(finance.total_balance or 0.0) if finance else 0.0,
+            "total_expenses": float(finance.total_expenses or 0.0) if finance else 0.0,
+            "final_balance": float(finance.final_balance or 0.0) if finance else 0.0,
+            "phonepay_entries": phonepay_entries,
+            "cash_entries": cash_entries,
+            "expenses": expenses,
+            "latest_invoice_date": latest_invoice_date
+        })
+    finally:
+        db.close()
+
+
+@sales_bp.route("/seller/sell-finance/overview", methods=["GET"])
+@auth_required()
+def sell_finance_overview():
+    db = SessionLocal()
+    try:
+        latest_invoice = db.query(Invoice).order_by(Invoice.id.desc()).first()
+        latest_invoice_totals = None
+        if latest_invoice and latest_invoice.invoice_number:
+            latest_invoice_totals = db.query(InvoiceTotals).filter(
+                InvoiceTotals.invoice_number == latest_invoice.invoice_number
+            ).first()
+
+        latest_sell_report = db.query(SellReport).order_by(SellReport.created_at.desc()).first()
+        sell_report_rows = db.query(
+            SellReport.report_date,
+            func.count(SellReport.id),
+            func.coalesce(func.sum(SellReport.sell_amount), 0.0),
+            func.max(SellReport.created_at),
+        ).group_by(SellReport.report_date).order_by(func.max(SellReport.created_at).desc()).all()
+
+        finance_rows = db.query(SellFinance).order_by(SellFinance.created_at.desc()).all()
+        finance_ids = [f.id for f in finance_rows]
+
+        expenses_map = {}
+        phonepay_map = {}
+        cash_map = {}
+        if finance_ids:
+            exp_rows = db.query(SellFinanceExpense).filter(
+                SellFinanceExpense.finance_id.in_(finance_ids)
+            ).all()
+            pp_rows = db.query(SellFinancePhonePay).filter(
+                SellFinancePhonePay.finance_id.in_(finance_ids)
+            ).all()
+            cash_rows = db.query(SellFinanceCash).filter(
+                SellFinanceCash.finance_id.in_(finance_ids)
+            ).all()
+
+            for r in exp_rows:
+                expenses_map.setdefault(r.finance_id, []).append({
+                    "name": r.name,
+                    "amount": float(r.amount or 0.0)
+                })
+            for r in pp_rows:
+                phonepay_map.setdefault(r.finance_id, []).append({
+                    "date": r.txn_date,
+                    "amount": float(r.amount or 0.0)
+                })
+            for r in cash_rows:
+                cash_map.setdefault(r.finance_id, []).append({
+                    "date": r.txn_date,
+                    "amount": float(r.amount or 0.0)
+                })
+
+        finance_payload = []
+        for f in finance_rows:
+            phonepay_entries = phonepay_map.get(f.id, [])
+            cash_entries = cash_map.get(f.id, [])
+            if not phonepay_entries and float(f.upi_phonepay or 0.0) != 0.0:
+                phonepay_entries = [{"date": f.report_date, "amount": float(f.upi_phonepay or 0.0)}]
+            if not cash_entries and float(f.cash or 0.0) != 0.0:
+                cash_entries = [{"date": f.report_date, "amount": float(f.cash or 0.0)}]
+
+            finance_payload.append({
+                "report_date": f.report_date,
+                "total_sell_amount": float(f.total_sell_amount or 0.0),
+                "last_balance_amount": float(f.last_balance_amount or 0.0),
+                "total_amount": float(f.total_amount or 0.0),
+                "upi_phonepay": float(f.upi_phonepay or 0.0),
+                "cash": float(f.cash or 0.0),
+                "total_balance": float(f.total_balance or 0.0),
+                "total_expenses": float(f.total_expenses or 0.0),
+                "final_balance": float(f.final_balance or 0.0),
+                "created_by": f.created_by,
+                "updated_by": f.updated_by,
+                "created_at": f.created_at.isoformat() if f.created_at else None,
+                "updated_at": f.updated_at.isoformat() if f.updated_at else None,
+                "phonepay_entries": phonepay_entries,
+                "cash_entries": cash_entries,
+                "expenses": expenses_map.get(f.id, []),
+            })
+
+        return jsonify({
+            "latest_invoice": {
+                "invoice_number": latest_invoice.invoice_number if latest_invoice else "",
+                "invoice_date": latest_invoice.invoice_date if latest_invoice else "",
+                "uploaded_by": latest_invoice.uploaded_by if latest_invoice else "",
+                "uploaded_at": latest_invoice.uploaded_at.isoformat() if latest_invoice and latest_invoice.uploaded_at else "",
+                "net_invoice_value": float(latest_invoice_totals.net_invoice_value or 0.0) if latest_invoice_totals else 0.0,
+                "special_excise_cess": float(latest_invoice_totals.special_excise_cess or 0.0) if latest_invoice_totals else 0.0,
+                "tcs": float(latest_invoice_totals.tcs or 0.0) if latest_invoice_totals else 0.0,
+                "total_invoice_value": float(latest_invoice_totals.total_invoice_value or 0.0) if latest_invoice_totals else 0.0,
+                "retailer_credit_balance": float(latest_invoice_totals.retailer_credit_balance or 0.0) if latest_invoice_totals else 0.0
+            },
+            "latest_sell_report": {
+                "report_date": latest_sell_report.report_date if latest_sell_report else "",
+                "created_by": latest_sell_report.created_by if latest_sell_report else "",
+                "created_at": latest_sell_report.created_at.isoformat() if latest_sell_report and latest_sell_report.created_at else "",
+                "sell_amount": float(latest_sell_report.sell_amount or 0.0) if latest_sell_report else 0.0
+            },
+            "sell_reports": [
+                {
+                    "report_date": r[0],
+                    "total_items": int(r[1] or 0),
+                    "total_sell_amount": float(r[2] or 0.0),
+                    "last_created_at": r[3].isoformat() if r[3] else None
+                }
+                for r in sell_report_rows
+            ],
+            "finance": finance_payload
         })
     finally:
         db.close()

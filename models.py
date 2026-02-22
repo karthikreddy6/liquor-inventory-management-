@@ -173,6 +173,24 @@ class SellFinanceExpense(Base):
     amount = Column(Float)
     created_at = Column(DateTime, server_default=func.now())
 
+class SellFinancePhonePay(Base):
+    __tablename__ = "sell_finance_phonepay"
+
+    id = Column(Integer, primary_key=True)
+    finance_id = Column(Integer, index=True)
+    txn_date = Column(String)
+    amount = Column(Float)
+    created_at = Column(DateTime, server_default=func.now())
+
+class SellFinanceCash(Base):
+    __tablename__ = "sell_finance_cash"
+
+    id = Column(Integer, primary_key=True)
+    finance_id = Column(Integer, index=True)
+    txn_date = Column(String)
+    amount = Column(Float)
+    created_at = Column(DateTime, server_default=func.now())
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 

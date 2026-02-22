@@ -14,6 +14,8 @@ from models import (
     SellReport,
     SellFinance,
     SellFinanceExpense,
+    SellFinancePhonePay,
+    SellFinanceCash,
     PriceListItem,
     AuditLog,
     UserLogin,
@@ -397,14 +399,14 @@ def admin_dashboard():
         btn.addEventListener("click", async () => {{
           if (authMode !== "Basic Auth") return;
           const invoice = btn.getAttribute("data-invoice");
-          if (!confirm(`Delete invoice ${invoice}?`)) return;
+          if (!confirm(`Delete invoice ${{invoice}}?`)) return;
           const user = prompt("Admin username:", "admin");
           const pass = prompt("Admin password:");
           if (!user || !pass) return;
           const token = btoa(`${{user}}:${{pass}}`);
-          const res = await fetch(`/admin/invoices/${invoice}`, {{
+          const res = await fetch(`/admin/invoices/${{invoice}}`, {{
             method: "DELETE",
-            headers: {{ "Authorization": `Basic ${token}` }}
+            headers: {{ "Authorization": `Basic ${{token}}` }}
           }});
           if (res.ok) location.reload();
           else alert("Delete failed");
@@ -534,6 +536,8 @@ def delete_sell_report(report_date):
         fin = db.query(SellFinance).filter(SellFinance.report_date == report_date).first()
         if fin:
             db.query(SellFinanceExpense).filter(SellFinanceExpense.finance_id == fin.id).delete()
+            db.query(SellFinancePhonePay).filter(SellFinancePhonePay.finance_id == fin.id).delete()
+            db.query(SellFinanceCash).filter(SellFinanceCash.finance_id == fin.id).delete()
             db.delete(fin)
         log_action(db, request.user, "DELETE_SELL_REPORT", "sell_report", report_date)
         _rebuild_stock_from_invoices(db)
@@ -550,6 +554,10 @@ def delete_sell_report(report_date):
 def delete_invoice(invoice_number):
     db = SessionLocal()
     try:
+        invoice_exists = db.query(Invoice).filter(Invoice.invoice_number == invoice_number).first()
+        if not invoice_exists:
+            return {"error": "invoice not found"}, 404
+
         db.query(InvoiceItem).filter(InvoiceItem.invoice_number == invoice_number).delete()
         db.query(InvoiceTotals).filter(InvoiceTotals.invoice_number == invoice_number).delete()
         db.query(Invoice).filter(Invoice.invoice_number == invoice_number).delete()
@@ -571,6 +579,8 @@ def delete_sell_finance(report_date):
         fin = db.query(SellFinance).filter(SellFinance.report_date == report_date).first()
         if not fin: return {"error": "not found"}, 404
         db.query(SellFinanceExpense).filter(SellFinanceExpense.finance_id == fin.id).delete()
+        db.query(SellFinancePhonePay).filter(SellFinancePhonePay.finance_id == fin.id).delete()
+        db.query(SellFinanceCash).filter(SellFinanceCash.finance_id == fin.id).delete()
         db.delete(fin)
         log_action(db, request.user, "DELETE_FINANCE", "sell_finance", report_date)
         db.commit()

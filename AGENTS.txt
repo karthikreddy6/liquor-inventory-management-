@@ -1,0 +1,45 @@
+Repository Guidelines
+
+Project Structure & Module Organization
+- app.py — Flask app entrypoint; registers blueprints.
+- routes/ — API endpoints (auth, upload, sales, admin).
+- services/ — business logic helpers (audit, pdf export, stock rebuild).
+- models.py — SQLAlchemy models and table schema.
+- database.py — SQLAlchemy engine/session setup (SQLite).
+- pdf_parser.py — PDF parsing logic for invoices.
+- invoices/, output/, requested_pdf/ — runtime file storage.
+- inventory.db — SQLite database (local dev).
+
+Build, Test, and Development Commands
+- python app.py — run the Flask API server.
+- python create_db.py — create/update DB tables from models.
+- python clear_db.py — delete all data except price_list.
+- pip install -r requirememnt.txt — install dependencies.
+
+Coding Style & Naming Conventions
+- Python: PEP8 style, 4-space indentation.
+- Keep route handlers thin; put reusable logic in services/.
+- Naming: snake_case for functions/vars; PascalCase for models.
+
+Testing Guidelines
+- No formal test framework currently in repo.
+- Manual testing: use Postman/React UI; verify JSON output and DB updates.
+- If adding tests, prefer pytest and keep tests under tests/.
+
+Commit & Pull Request Guidelines
+- Current history shows short, informal messages (e.g., db, pdf resolve).
+- Recommendation: use clear, action-oriented messages like fix: parse net invoice total.
+- PRs (if used) should include: summary, endpoints affected, and any schema changes.
+
+Security & Configuration Tips
+- Auth:
+  - JWT via /auth/login for owner/supervisor.
+  - Basic Auth for admin endpoints.
+- Configure creds in config.py or via env vars:
+  - ADMIN_USER, ADMIN_PASS, OWNER_USER, OWNER_PASS, SUPERVISOR_USER, SUPERVISOR_PASS.
+- SQLite concurrency is improved via WAL + busy timeout in database.py.
+
+Architecture Notes
+- Invoice flow: upload PDF → parse → store invoice/items/totals → update stock.
+- Sell report flow: prepare → create → optional finance → reports/PDF.
+- Admin deletes rebuild stock from remaining invoices to avoid negative counts.

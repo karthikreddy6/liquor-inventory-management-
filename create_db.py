@@ -9,6 +9,8 @@ from models import (
     PriceListItem,
     SellFinance,
     SellFinanceExpense,
+    SellFinancePhonePay,
+    SellFinanceCash,
     AuditLog,
     UserLogin,
 )
