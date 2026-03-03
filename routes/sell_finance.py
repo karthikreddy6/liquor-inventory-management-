@@ -320,6 +320,12 @@ def sell_finance_overview():
         total_tcs_all = float(db.query(
             func.coalesce(func.sum(InvoiceTotals.tcs), 0.0)
         ).scalar() or 0.0)
+        total_new_retailer_professional_tax_all = float(db.query(
+            func.coalesce(func.sum(InvoiceTotals.new_retailer_professional_tax), 0.0)
+        ).scalar() or 0.0)
+        total_retail_shop_excise_turnover_tax_all = float(db.query(
+            func.coalesce(func.sum(InvoiceTotals.retail_shop_excise_turnover_tax), 0.0)
+        ).scalar() or 0.0)
 
         invoice_rows = db.query(Invoice).order_by(Invoice.id.desc()).all()
         invoice_numbers = [i.invoice_number for i in invoice_rows if i.invoice_number]
@@ -342,6 +348,8 @@ def sell_finance_overview():
                 "net_invoice_value": float(tot.net_invoice_value or 0.0) if tot else 0.0,
                 "special_excise_cess": float(tot.special_excise_cess or 0.0) if tot else 0.0,
                 "tcs": float(tot.tcs or 0.0) if tot else 0.0,
+                "new_retailer_professional_tax": float(tot.new_retailer_professional_tax or 0.0) if tot else 0.0,
+                "retail_shop_excise_turnover_tax": float(tot.retail_shop_excise_turnover_tax or 0.0) if tot else 0.0,
                 "total_invoice_value": float(tot.total_invoice_value or 0.0) if tot else 0.0,
                 "retailer_credit_balance": float(tot.retailer_credit_balance or 0.0) if tot else 0.0
             })
@@ -431,6 +439,8 @@ def sell_finance_overview():
                 "all_invoices_net_invoice_value": total_net_invoice_value_all,
                 "all_invoices_special_excise_cess": total_special_excise_cess_all,
                 "all_invoices_tcs": total_tcs_all,
+                "all_invoices_new_retailer_professional_tax": total_new_retailer_professional_tax_all,
+                "all_invoices_retail_shop_excise_turnover_tax": total_retail_shop_excise_turnover_tax_all,
                 "all_sell_amount": total_sell_amount_all
             },
             "latest_invoice": {
@@ -441,6 +451,8 @@ def sell_finance_overview():
                 "net_invoice_value": float(latest_invoice_totals.net_invoice_value or 0.0) if latest_invoice_totals else 0.0,
                 "special_excise_cess": float(latest_invoice_totals.special_excise_cess or 0.0) if latest_invoice_totals else 0.0,
                 "tcs": float(latest_invoice_totals.tcs or 0.0) if latest_invoice_totals else 0.0,
+                "new_retailer_professional_tax": float(latest_invoice_totals.new_retailer_professional_tax or 0.0) if latest_invoice_totals else 0.0,
+                "retail_shop_excise_turnover_tax": float(latest_invoice_totals.retail_shop_excise_turnover_tax or 0.0) if latest_invoice_totals else 0.0,
                 "total_invoice_value": total_invoice_value_all,
                 "retailer_credit_balance": float(latest_invoice_totals.retailer_credit_balance or 0.0) if latest_invoice_totals else 0.0
             },

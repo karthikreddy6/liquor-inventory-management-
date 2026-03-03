@@ -27,6 +27,8 @@ class InvoiceTotals(Base):
     sub_total = Column(Float)
     special_excise_cess = Column(Float)
     tcs = Column(Float)
+    new_retailer_professional_tax = Column(Float)
+    retail_shop_excise_turnover_tax = Column(Float)
     less_this_invoice_value = Column(Float)
     retailer_credit_balance = Column(Float)
     invoice_value = Column(Float)

@@ -926,6 +926,8 @@ def sell_finance_overview():
                 "net_invoice_value": float(latest_invoice_totals.net_invoice_value or 0.0) if latest_invoice_totals else 0.0,
                 "special_excise_cess": float(latest_invoice_totals.special_excise_cess or 0.0) if latest_invoice_totals else 0.0,
                 "tcs": float(latest_invoice_totals.tcs or 0.0) if latest_invoice_totals else 0.0,
+                "new_retailer_professional_tax": float(latest_invoice_totals.new_retailer_professional_tax or 0.0) if latest_invoice_totals else 0.0,
+                "retail_shop_excise_turnover_tax": float(latest_invoice_totals.retail_shop_excise_turnover_tax or 0.0) if latest_invoice_totals else 0.0,
                 "total_invoice_value": float(latest_invoice_totals.total_invoice_value or 0.0) if latest_invoice_totals else 0.0,
                 "retailer_credit_balance": float(latest_invoice_totals.retailer_credit_balance or 0.0) if latest_invoice_totals else 0.0
             },

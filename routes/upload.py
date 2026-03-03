@@ -94,6 +94,8 @@ def upload_pdf():
             sub_total=totals_data.get("sub_total", 0.0),
             special_excise_cess=totals_data.get("special_excise_cess", 0.0),
             tcs=totals_data.get("tcs", 0.0),
+            new_retailer_professional_tax=totals_data.get("new_retailer_professional_tax", 0.0),
+            retail_shop_excise_turnover_tax=totals_data.get("retail_shop_excise_turnover_tax", 0.0),
             less_this_invoice_value=totals_data.get("less_this_invoice_value", 0.0),
             retailer_credit_balance=totals_data.get("retailer_credit_balance", 0.0),
             invoice_value=totals_data.get("invoice_value", 0.0),

@@ -131,6 +131,8 @@ def extract_totals_block(text):
         "sub_total": 0.0,
         "special_excise_cess": 0.0,
         "tcs": 0.0,
+        "new_retailer_professional_tax": 0.0,
+        "retail_shop_excise_turnover_tax": 0.0,
         "less_this_invoice_value": 0.0,
         "retailer_credit_balance": 0.0
     }
@@ -145,6 +147,8 @@ def extract_totals_block(text):
 
     totals["special_excise_cess"] = extract("Special Excise Cess")
     totals["tcs"] = extract("TCS")
+    totals["new_retailer_professional_tax"] = extract("New Retailer Professional Tax")
+    totals["retail_shop_excise_turnover_tax"] = extract("Retail Shop Excise Turnover Tax")
     totals["e_challan_amount"] = extract("e-challan / DD Amount")
     totals["previous_credit"] = extract("Previous Credit")
     totals["sub_total"] = extract("Sub Total")
@@ -249,6 +253,8 @@ def parse_invoice_pdf(pdf_path: str):
             float(invoice["totals"].get("net_invoice_value", 0.0))
             + float(invoice["totals"].get("special_excise_cess", 0.0))
             + float(invoice["totals"].get("tcs", 0.0))
+            + float(invoice["totals"].get("new_retailer_professional_tax", 0.0))
+            + float(invoice["totals"].get("retail_shop_excise_turnover_tax", 0.0))
         )
 
     # -------- SAVE JSON FILE --------
