@@ -159,6 +159,7 @@ class SellFinance(Base):
     upi_phonepay = Column(Float)
     cash = Column(Float)
     total_balance = Column(Float)
+    total_outside_income = Column(Float)
     total_expenses = Column(Float)
     final_balance = Column(Float)
     created_by = Column(String)
@@ -190,6 +191,15 @@ class SellFinanceCash(Base):
     id = Column(Integer, primary_key=True)
     finance_id = Column(Integer, index=True)
     txn_date = Column(String)
+    amount = Column(Float)
+    created_at = Column(DateTime, server_default=func.now())
+
+class SellFinanceOutsideIncome(Base):
+    __tablename__ = "sell_finance_outside_income"
+
+    id = Column(Integer, primary_key=True)
+    finance_id = Column(Integer, index=True)
+    name = Column(String)
     amount = Column(Float)
     created_at = Column(DateTime, server_default=func.now())
 

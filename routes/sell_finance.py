@@ -9,6 +9,7 @@ from models import (
     SellFinance,
     SellFinanceCash,
     SellFinanceExpense,
+    SellFinanceOutsideIncome,
     SellFinancePhonePay,
     SellReport,
 )
@@ -31,6 +32,7 @@ def create_sell_finance():
     upi_phonepay = payload.get("upi_phonepay", 0)
     cash = payload.get("cash", 0)
     expenses = payload.get("expenses", [])
+    outside_income = payload.get("outside_income", [])
     phonepay_entries = payload.get("phonepay_entries", [])
     cash_entries = payload.get("cash_entries", [])
 
@@ -38,6 +40,8 @@ def create_sell_finance():
         return {"error": "report_date is required"}, 400
     if not isinstance(expenses, list):
         return {"error": "expenses must be a list"}, 400
+    if not isinstance(outside_income, list):
+        return {"error": "outside_income must be a list"}, 400
     if not isinstance(phonepay_entries, list):
         return {"error": "phonepay_entries must be a list"}, 400
     if not isinstance(cash_entries, list):
@@ -47,6 +51,7 @@ def create_sell_finance():
     try:
         SellFinancePhonePay.__table__.create(bind=db.get_bind(), checkfirst=True)
         SellFinanceCash.__table__.create(bind=db.get_bind(), checkfirst=True)
+        SellFinanceOutsideIncome.__table__.create(bind=db.get_bind(), checkfirst=True)
 
         latest_invoice = db.query(Invoice).order_by(Invoice.id.desc()).first()
         if not latest_invoice:
@@ -116,6 +121,20 @@ def create_sell_finance():
         total_amount = float(total_sell_amount) + float(last_balance_amount)
         total_balance = float(upi_phonepay) + float(cash) - float(total_amount)
 
+        total_outside_income = 0.0
+        cleaned_outside_income = []
+        for inc in outside_income:
+            name = str(inc.get("name", "")).strip()
+            amount = inc.get("amount", 0)
+            if not name:
+                continue
+            try:
+                amount = float(amount or 0.0)
+            except Exception:
+                return {"error": "outside_income amount must be a number"}, 400
+            total_outside_income += amount
+            cleaned_outside_income.append({"name": name, "amount": amount})
+
         total_expenses = 0.0
         cleaned_expenses = []
         for exp in expenses:
@@ -130,7 +149,7 @@ def create_sell_finance():
             total_expenses += amount
             cleaned_expenses.append({"name": name, "amount": amount})
 
-        final_balance = float(total_balance) - float(total_expenses)
+        final_balance = float(total_balance) + float(total_outside_income) - float(total_expenses)
 
         if finance:
             finance.total_sell_amount = total_sell_amount
@@ -139,12 +158,16 @@ def create_sell_finance():
             finance.upi_phonepay = upi_phonepay
             finance.cash = cash
             finance.total_balance = total_balance
+            finance.total_outside_income = total_outside_income
             finance.total_expenses = total_expenses
             finance.final_balance = final_balance
             finance.updated_by = request.user.get("username")
 
             db.query(SellFinanceExpense).filter(
                 SellFinanceExpense.finance_id == finance.id
+            ).delete()
+            db.query(SellFinanceOutsideIncome).filter(
+                SellFinanceOutsideIncome.finance_id == finance.id
             ).delete()
             db.query(SellFinancePhonePay).filter(
                 SellFinancePhonePay.finance_id == finance.id
@@ -161,6 +184,7 @@ def create_sell_finance():
                 upi_phonepay=upi_phonepay,
                 cash=cash,
                 total_balance=total_balance,
+                total_outside_income=total_outside_income,
                 total_expenses=total_expenses,
                 final_balance=final_balance,
                 created_by=request.user.get("username"),
@@ -174,6 +198,12 @@ def create_sell_finance():
                 finance_id=finance.id,
                 name=exp["name"],
                 amount=exp["amount"]
+            ))
+        for inc in cleaned_outside_income:
+            db.add(SellFinanceOutsideIncome(
+                finance_id=finance.id,
+                name=inc["name"],
+                amount=inc["amount"]
             ))
         for entry in cleaned_phonepay_entries:
             db.add(SellFinancePhonePay(
@@ -199,10 +229,12 @@ def create_sell_finance():
             "upi_phonepay": upi_phonepay,
             "cash": cash,
             "total_balance": total_balance,
+            "total_outside_income": total_outside_income,
             "total_expenses": total_expenses,
             "final_balance": final_balance,
             "phonepay_entries": cleaned_phonepay_entries,
             "cash_entries": cleaned_cash_entries,
+            "outside_income": cleaned_outside_income,
             "expenses": cleaned_expenses
         })
     finally:
@@ -220,6 +252,7 @@ def prepare_sell_finance():
     try:
         SellFinancePhonePay.__table__.create(bind=db.get_bind(), checkfirst=True)
         SellFinanceCash.__table__.create(bind=db.get_bind(), checkfirst=True)
+        SellFinanceOutsideIncome.__table__.create(bind=db.get_bind(), checkfirst=True)
 
         latest_invoice = db.query(Invoice).order_by(Invoice.id.desc()).first()
         latest_invoice_date = latest_invoice.invoice_date if latest_invoice else ""
@@ -262,6 +295,7 @@ def prepare_sell_finance():
                 cash_entries = [{"date": report_date, "amount": float(finance.cash or 0.0)}]
 
         expenses = []
+        outside_income = []
         if finance:
             expense_rows = db.query(SellFinanceExpense).filter(
                 SellFinanceExpense.finance_id == finance.id
@@ -269,6 +303,13 @@ def prepare_sell_finance():
             expenses = [
                 {"name": r.name, "amount": float(r.amount or 0.0)}
                 for r in expense_rows
+            ]
+            outside_income_rows = db.query(SellFinanceOutsideIncome).filter(
+                SellFinanceOutsideIncome.finance_id == finance.id
+            ).all()
+            outside_income = [
+                {"name": r.name, "amount": float(r.amount or 0.0)}
+                for r in outside_income_rows
             ]
 
         last_balance_amount = get_last_finance_balance(db, finance.id if finance else None)
@@ -284,10 +325,12 @@ def prepare_sell_finance():
             "upi_phonepay": float(finance.upi_phonepay or 0.0) if finance else 0.0,
             "cash": float(finance.cash or 0.0) if finance else 0.0,
             "total_balance": float(finance.total_balance or 0.0) if finance else 0.0,
+            "total_outside_income": float(finance.total_outside_income or 0.0) if finance else 0.0,
             "total_expenses": float(finance.total_expenses or 0.0) if finance else 0.0,
             "final_balance": float(finance.final_balance or 0.0) if finance else 0.0,
             "phonepay_entries": phonepay_entries,
             "cash_entries": cash_entries,
+            "outside_income": outside_income,
             "expenses": expenses,
             "latest_invoice_date": latest_invoice_date,
             "allowed_entry_date_from": min_allowed_date,
@@ -376,11 +419,15 @@ def sell_finance_overview():
         finance_ids = [f.id for f in finance_rows]
 
         expenses_map = {}
+        outside_income_map = {}
         phonepay_map = {}
         cash_map = {}
         if finance_ids:
             exp_rows = db.query(SellFinanceExpense).filter(
                 SellFinanceExpense.finance_id.in_(finance_ids)
+            ).all()
+            out_rows = db.query(SellFinanceOutsideIncome).filter(
+                SellFinanceOutsideIncome.finance_id.in_(finance_ids)
             ).all()
             pp_rows = db.query(SellFinancePhonePay).filter(
                 SellFinancePhonePay.finance_id.in_(finance_ids)
@@ -391,6 +438,11 @@ def sell_finance_overview():
 
             for r in exp_rows:
                 expenses_map.setdefault(r.finance_id, []).append({
+                    "name": r.name,
+                    "amount": float(r.amount or 0.0)
+                })
+            for r in out_rows:
+                outside_income_map.setdefault(r.finance_id, []).append({
                     "name": r.name,
                     "amount": float(r.amount or 0.0)
                 })
@@ -422,6 +474,7 @@ def sell_finance_overview():
                 "upi_phonepay": float(f.upi_phonepay or 0.0),
                 "cash": float(f.cash or 0.0),
                 "total_balance": float(f.total_balance or 0.0),
+                "total_outside_income": float(f.total_outside_income or 0.0),
                 "total_expenses": float(f.total_expenses or 0.0),
                 "final_balance": float(f.final_balance or 0.0),
                 "created_by": f.created_by,
@@ -430,6 +483,7 @@ def sell_finance_overview():
                 "updated_at": f.updated_at.isoformat() if f.updated_at else None,
                 "phonepay_entries": phonepay_entries,
                 "cash_entries": cash_entries,
+                "outside_income": outside_income_map.get(f.id, []),
                 "expenses": expenses_map.get(f.id, []),
             })
 

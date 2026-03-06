@@ -10,6 +10,7 @@ from models import (
     SellFinance,
     SellFinanceCash,
     SellFinanceExpense,
+    SellFinanceOutsideIncome,
     SellFinancePhonePay,
     SellReport,
 )
@@ -126,10 +127,12 @@ def build_finance_payload(db, report_date):
             "upi_phonepay": 0.0,
             "cash": 0.0,
             "total_balance": 0.0,
+            "total_outside_income": 0.0,
             "total_expenses": 0.0,
             "final_balance": 0.0,
             "phonepay_entries": [],
             "cash_entries": [],
+            "outside_income": [],
             "expenses": []
         }
 
@@ -142,6 +145,9 @@ def build_finance_payload(db, report_date):
     expense_rows = db.query(SellFinanceExpense).filter(
         SellFinanceExpense.finance_id == finance.id
     ).all()
+    outside_income_rows = db.query(SellFinanceOutsideIncome).filter(
+        SellFinanceOutsideIncome.finance_id == finance.id
+    ).all()
 
     return {
         "exists": True,
@@ -152,6 +158,7 @@ def build_finance_payload(db, report_date):
         "upi_phonepay": float(finance.upi_phonepay or 0.0),
         "cash": float(finance.cash or 0.0),
         "total_balance": float(finance.total_balance or 0.0),
+        "total_outside_income": float(finance.total_outside_income or 0.0),
         "total_expenses": float(finance.total_expenses or 0.0),
         "final_balance": float(finance.final_balance or 0.0),
         "phonepay_entries": [
@@ -161,6 +168,10 @@ def build_finance_payload(db, report_date):
         "cash_entries": [
             {"date": r.txn_date, "amount": float(r.amount or 0.0)}
             for r in cash_rows
+        ],
+        "outside_income": [
+            {"name": r.name, "amount": float(r.amount or 0.0)}
+            for r in outside_income_rows
         ],
         "expenses": [
             {"name": r.name, "amount": float(r.amount or 0.0)}

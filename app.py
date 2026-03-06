@@ -9,12 +9,16 @@ from routes.seller import seller_bp
 from routes.auth import auth_bp
 from routes.sell_report import sell_report_bp
 from routes.sell_finance import sell_finance_bp
-from services.db_migrations import ensure_invoice_totals_tax_columns
+from services.db_migrations import (
+    ensure_invoice_totals_tax_columns,
+    ensure_sell_finance_outside_income_support,
+)
 
 app = Flask(__name__)
 CORS(app)
 
 ensure_invoice_totals_tax_columns(engine)
+ensure_sell_finance_outside_income_support(engine)
 
 app.register_blueprint(upload_bp)
 app.register_blueprint(stock_bp)

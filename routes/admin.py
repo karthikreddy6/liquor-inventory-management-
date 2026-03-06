@@ -16,6 +16,7 @@ from models import (
     SellFinanceExpense,
     SellFinancePhonePay,
     SellFinanceCash,
+    SellFinanceOutsideIncome,
     PriceListItem,
     AuditLog,
     UserLogin,
@@ -536,6 +537,7 @@ def delete_sell_report(report_date):
         fin = db.query(SellFinance).filter(SellFinance.report_date == report_date).first()
         if fin:
             db.query(SellFinanceExpense).filter(SellFinanceExpense.finance_id == fin.id).delete()
+            db.query(SellFinanceOutsideIncome).filter(SellFinanceOutsideIncome.finance_id == fin.id).delete()
             db.query(SellFinancePhonePay).filter(SellFinancePhonePay.finance_id == fin.id).delete()
             db.query(SellFinanceCash).filter(SellFinanceCash.finance_id == fin.id).delete()
             db.delete(fin)
@@ -579,6 +581,7 @@ def delete_sell_finance(report_date):
         fin = db.query(SellFinance).filter(SellFinance.report_date == report_date).first()
         if not fin: return {"error": "not found"}, 404
         db.query(SellFinanceExpense).filter(SellFinanceExpense.finance_id == fin.id).delete()
+        db.query(SellFinanceOutsideIncome).filter(SellFinanceOutsideIncome.finance_id == fin.id).delete()
         db.query(SellFinancePhonePay).filter(SellFinancePhonePay.finance_id == fin.id).delete()
         db.query(SellFinanceCash).filter(SellFinanceCash.finance_id == fin.id).delete()
         db.delete(fin)
