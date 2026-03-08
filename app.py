@@ -12,6 +12,8 @@ from routes.sell_finance import sell_finance_bp
 from services.db_migrations import (
     ensure_invoice_totals_tax_columns,
     ensure_sell_finance_outside_income_support,
+    ensure_user_brand_aliases_support,
+    ensure_user_brand_sort_preferences_support,
 )
 
 app = Flask(__name__)
@@ -19,6 +21,8 @@ CORS(app)
 
 ensure_invoice_totals_tax_columns(engine)
 ensure_sell_finance_outside_income_support(engine)
+ensure_user_brand_aliases_support(engine)
+ensure_user_brand_sort_preferences_support(engine)
 
 app.register_blueprint(upload_bp)
 app.register_blueprint(stock_bp)

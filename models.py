@@ -222,3 +222,28 @@ class UserLogin(Base):
     username = Column(String, unique=True, index=True)
     role = Column(String)
     last_login_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+class UserBrandSortPreference(Base):
+    __tablename__ = "user_brand_sort_preferences"
+    __table_args__ = (
+        UniqueConstraint("username", "brand_number", name="uq_user_brand_sort_preference"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    username = Column(String, index=True)
+    brand_number = Column(String, index=True)
+    sort_index = Column(Integer, index=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+class UserBrandAlias(Base):
+    __tablename__ = "user_brand_aliases"
+    __table_args__ = (
+        UniqueConstraint("username", "brand_number", name="uq_user_brand_alias"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    username = Column(String, index=True)
+    brand_number = Column(String, index=True)
+    short_name = Column(String(20))
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

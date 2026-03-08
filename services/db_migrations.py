@@ -54,3 +54,62 @@ def ensure_sell_finance_outside_income_support(engine):
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             """))
+
+
+def ensure_user_brand_sort_preferences_support(engine):
+    with engine.begin() as conn:
+        table_exists = conn.execute(
+            text("SELECT name FROM sqlite_master WHERE type='table' AND name='user_brand_sort_preferences'")
+        ).fetchone()
+        if not table_exists:
+            conn.execute(text("""
+                CREATE TABLE user_brand_sort_preferences (
+                    id INTEGER PRIMARY KEY,
+                    username VARCHAR,
+                    brand_number VARCHAR,
+                    sort_index INTEGER,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT uq_user_brand_sort_preference UNIQUE (username, brand_number)
+                )
+            """))
+
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_user_brand_sort_preferences_username "
+            "ON user_brand_sort_preferences (username)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_user_brand_sort_preferences_brand_number "
+            "ON user_brand_sort_preferences (brand_number)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_user_brand_sort_preferences_sort_index "
+            "ON user_brand_sort_preferences (sort_index)"
+        ))
+
+
+def ensure_user_brand_aliases_support(engine):
+    with engine.begin() as conn:
+        table_exists = conn.execute(
+            text("SELECT name FROM sqlite_master WHERE type='table' AND name='user_brand_aliases'")
+        ).fetchone()
+        if not table_exists:
+            conn.execute(text("""
+                CREATE TABLE user_brand_aliases (
+                    id INTEGER PRIMARY KEY,
+                    username VARCHAR,
+                    brand_number VARCHAR,
+                    short_name VARCHAR(20),
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT uq_user_brand_alias UNIQUE (username, brand_number)
+                )
+            """))
+
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_user_brand_aliases_username "
+            "ON user_brand_aliases (username)"
+        ))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_user_brand_aliases_brand_number "
+            "ON user_brand_aliases (brand_number)"
+        ))
