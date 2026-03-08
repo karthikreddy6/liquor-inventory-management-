@@ -3044,6 +3044,15 @@
     {
         "brand_number": "0672",
         "size_code": "NN",
+        "pack_type": "G",
+        "product_name": "DIAMOND FINE WHISKY",
+        "mrp": 110,
+        "type": "Local",
+        "botel_pack_quantity(ml)": 180
+    },
+    {
+        "brand_number": "0672",
+        "size_code": "NN",
         "pack_type": "P",
         "product_name": "DIAMOND FINE WHISKY",
         "mrp": 110,
@@ -11471,6 +11480,15 @@
         "pack_type": "G",
         "product_name": "ARTIC PURE VODKA NATURAL GREEN APPLE",
         "mrp": 1600,
+        "type": "Local",
+        "botel_pack_quantity(ml)": 750
+    },
+    {
+        "brand_number": "1536-OLD",
+        "size_code": "QQ",
+        "pack_type": "G",
+        "product_name": "OLD_ARTIC PURE VODKA NATURAL GREEN APPLE",
+        "mrp": 1520,
         "type": "Local",
         "botel_pack_quantity(ml)": 750
     },
