@@ -51,6 +51,10 @@ Side effects:
 Roles: owner, supervisor
 Returns current stock list and stock summary.
 
+### GET `/stock/pdf`
+Roles: owner, supervisor  
+Downloads a PDF of the present stock list.
+
 ## 5) Sell Report
 
 ### GET `/seller/sell-report/prepare`
@@ -126,18 +130,33 @@ Returns sell report batches with finance summary.
 Generates and stores PDFs in:
 - `requested_pdf/invoices`
 - `requested_pdf/sellreport`
+- `requested_pdf/stock`
 
 Endpoints:
 ```
 GET /reports/invoices/<invoice_number>/pdf
 GET /reports/sell-reports/<report_date>/pdf
+GET /reports/stock/pdf
+GET /stock/pdf
 ```
 
 ## 8) Dashboard Summary
 
 ### GET `/dashboard/summary`
 Roles: owner, supervisor  
-Returns a live dashboard summary (same as login summary).
+Returns a live dashboard summary.
+Fields:
+- `total_present_stock`
+- `total_present_stock_mrp_value`
+- `last_sell_report_date`
+- `last_sell_report_value`
+- `last_invoice_date`
+- `last_invoice_value`
+- `last_invoice_number`
+- `last_invoice_brands_count`
+- `total_sell_mrp`
+- `total_invoices_value`
+- `total_uncleared_balance`
 
 ## 9) Database Tables (Key)
 

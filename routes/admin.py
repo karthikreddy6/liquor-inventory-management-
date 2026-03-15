@@ -23,7 +23,7 @@ from models import (
 )
 from auth import jwt_required
 from config import APP_START_TIME, ADMIN_USER, ADMIN_PASS
-from services.pdf_export import write_invoice_pdf, write_sell_report_pdf
+from services.pdf_export import write_invoice_pdf, write_sell_report_pdf, write_present_stock_pdf
 from services.audit import log_action, update_last_login
 from services.stock_service import recalc_stock_summary
 from models import PriceListItem
@@ -435,26 +435,29 @@ def dashboard_summary():
     db = SessionLocal()
     try:
         last_finance = db.query(SellFinance).order_by(SellFinance.created_at.desc()).first()
-        last_uncleared_amount = float(last_finance.final_balance or 0.0) if last_finance else 0.0
+        total_uncleared_balance = float(last_finance.final_balance or 0.0) if last_finance else 0.0
 
         last_invoice = db.query(Invoice).order_by(Invoice.id.desc()).first()
         last_invoice_date = last_invoice.invoice_date if last_invoice else ""
         last_invoice_number = last_invoice.invoice_number if last_invoice else ""
 
         last_invoice_value = 0.0
-        last_retailer_credit = 0.0
+        last_invoice_brands_count = 0
         if last_invoice:
             totals = db.query(InvoiceTotals).filter(
                 InvoiceTotals.invoice_number == last_invoice.invoice_number
             ).first()
             if totals:
                 last_invoice_value = float(totals.total_invoice_value or 0.0)
-                last_retailer_credit = float(totals.retailer_credit_balance or 0.0)
+            last_invoice_brands_count = db.query(
+                func.count(func.distinct(InvoiceItem.brand_number))
+            ).filter(InvoiceItem.invoice_number == last_invoice.invoice_number).scalar()
+        last_invoice_brands_count = int(last_invoice_brands_count or 0)
 
         total_present_stock = db.query(
             func.coalesce(func.sum(PresentStockDetail.total_cases), 0)
         ).scalar()
-        total_present_stock = int(total_present_stock or 0)
+        total_present_stock = float(total_present_stock or 0)
 
         summary = db.query(StockSummary).first()
         total_present_stock_mrp_value = float(summary.total_price_all_items or 0.0) if summary else 0.0
@@ -467,16 +470,25 @@ def dashboard_summary():
                 func.coalesce(func.sum(SellReport.sell_amount), 0.0)
             ).filter(SellReport.report_date == last_report_date).scalar()
 
+        total_sell_mrp = db.query(
+            func.coalesce(func.sum(SellReport.sell_amount), 0.0)
+        ).scalar()
+        total_invoices_value = db.query(
+            func.coalesce(func.sum(InvoiceTotals.total_invoice_value), 0.0)
+        ).scalar()
+
         return jsonify({
-            "last_uncleared_amount": last_uncleared_amount,
-            "last_invoice_date": last_invoice_date,
-            "last_invoice_number": last_invoice_number,
-            "last_invoice_value": last_invoice_value,
-            "last_invoice_retailer_credit_balance": last_retailer_credit,
             "total_present_stock": total_present_stock,
             "total_present_stock_mrp_value": total_present_stock_mrp_value,
             "last_sell_report_date": last_report_date,
-            "last_sell_report_value": float(last_sell_report_value or 0.0)
+            "last_sell_report_value": float(last_sell_report_value or 0.0),
+            "last_invoice_date": last_invoice_date,
+            "last_invoice_value": last_invoice_value,
+            "last_invoice_number": last_invoice_number,
+            "last_invoice_brands_count": last_invoice_brands_count,
+            "total_sell_mrp": float(total_sell_mrp or 0.0),
+            "total_invoices_value": float(total_invoices_value or 0.0),
+            "total_uncleared_balance": total_uncleared_balance,
         })
     finally:
         db.close()
@@ -714,6 +726,65 @@ def sell_report_pdf(report_date):
         filename = f"sell_report_{safe_date}.pdf"
         out_path = os.path.join(out_dir, filename)
         write_sell_report_pdf(out_path, meta_rows, items_rows, finance_rows, [], title="Sell Report")
+        return send_file(out_path, as_attachment=True, download_name=filename)
+    finally:
+        db.close()
+
+@admin_bp.route("/reports/stock/pdf", methods=["GET"])
+@admin_or_staff_required
+def present_stock_pdf():
+    db = SessionLocal()
+    try:
+        rows = db.query(PresentStockDetail).order_by(PresentStockDetail.brand_name.asc()).all()
+        if not rows:
+            return {"error": "no stock data"}, 404
+        summary = db.query(StockSummary).first()
+
+        meta_rows = [
+            ["Generated At", time.strftime("%Y-%m-%d %H:%M:%S")],
+            ["Total Items", len(rows)],
+        ]
+        summary_rows = []
+        if summary:
+            summary_rows = [
+                ["Total Cases (All Items)", summary.total_cases_all_items],
+                ["Total Amount (All Items)", summary.total_price_all_items],
+            ]
+
+        items_rows = [[
+            "#",
+            "Brand No",
+            "Brand Name",
+            "Pack",
+            "Type",
+            "Cases",
+            "Bottles",
+            "Rate/Case",
+            "Rate/Bottle",
+            "Amount",
+            "Last Invoice Date",
+        ]]
+        for idx, r in enumerate(rows, start=1):
+            pack = f"{r.pack_size_case or ''}/{r.pack_size_quantity_ml or ''}ml"
+            items_rows.append([
+                idx,
+                r.brand_number or "",
+                r.brand_name or "",
+                pack,
+                r.pack_type or "",
+                r.total_cases or 0,
+                r.total_bottles or 0,
+                r.rate_per_case if r.rate_per_case is not None else "",
+                r.unit_rate_per_bottle if r.unit_rate_per_bottle is not None else "",
+                r.total_amount if r.total_amount is not None else "",
+                r.last_invoice_date or "",
+            ])
+
+        out_dir = os.path.join("requested_pdf", "stock")
+        os.makedirs(out_dir, exist_ok=True)
+        filename = f"present_stock_{time.strftime('%Y-%m-%d')}.pdf"
+        out_path = os.path.join(out_dir, filename)
+        write_present_stock_pdf(out_path, meta_rows, items_rows, summary_rows, title="Present Stock Report")
         return send_file(out_path, as_attachment=True, download_name=filename)
     finally:
         db.close()
