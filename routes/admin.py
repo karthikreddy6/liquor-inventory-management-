@@ -4,6 +4,7 @@ import time
 import os
 import base64
 from functools import wraps
+from reportlab.lib.units import mm
 from database import SessionLocal
 from models import (
     Invoice,
@@ -23,9 +24,16 @@ from models import (
 )
 from auth import jwt_required
 from config import APP_START_TIME, ADMIN_USER, ADMIN_PASS
-from services.pdf_export import write_invoice_pdf, write_sell_report_pdf, write_present_stock_pdf
+from services.pdf_export import (
+    write_date_range_summary_pdf,
+    write_invoice_pdf,
+    write_present_stock_pdf,
+    write_range_sections_pdf,
+    write_sell_report_pdf,
+)
 from services.audit import log_action, update_last_login
 from services.stock_service import recalc_stock_summary
+from services.sales_utils import parse_report_date
 from models import PriceListItem
 
 admin_bp = Blueprint("admin", __name__)
@@ -97,6 +105,28 @@ def admin_basic_required(fn):
                 return fn(*args, **kwargs)
         return Response("Unauthorized: Basic Auth Required", 401, {"WWW-Authenticate": 'Basic realm="Admin"'})
     return wrapper
+
+
+def _in_date_range(raw_date, date_from, date_to):
+    parsed = parse_report_date(raw_date)
+    if not parsed:
+        return False, None
+    return date_from <= parsed <= date_to, parsed
+
+
+def _parse_date_range_from_request():
+    date_from_raw = str(request.args.get("date_from") or request.args.get("start_date") or "").strip()
+    date_to_raw = str(request.args.get("date_to") or request.args.get("end_date") or "").strip()
+    if not date_from_raw or not date_to_raw:
+        return None, None, {"error": "date_from and date_to are required"}, 400
+
+    date_from = parse_report_date(date_from_raw)
+    date_to = parse_report_date(date_to_raw)
+    if not date_from or not date_to:
+        return None, None, {"error": "invalid date_from or date_to format"}, 400
+    if date_from > date_to:
+        return None, None, {"error": "date_from must be on or before date_to"}, 400
+    return date_from, date_to, None, None
 
 
 def _rebuild_stock_from_invoices(db):
@@ -681,6 +711,401 @@ def admin_update_invoice(invoice_number):
         log_action(db, request.user, "EDIT_INVOICE", "invoice", invoice_number, details=str(payload))
         db.commit()
         return jsonify({"status": "ok"})
+    finally:
+        db.close()
+
+
+@admin_bp.route("/reports/summary/pdf", methods=["GET"])
+@admin_or_staff_required
+def date_range_summary_pdf():
+    date_from, date_to, err, status = _parse_date_range_from_request()
+    if err:
+        return err, status
+
+    db = SessionLocal()
+    try:
+        invoice_rows_all = db.query(Invoice).all()
+        invoices_in_range = []
+        for invoice in invoice_rows_all:
+            allowed, parsed_date = _in_date_range(invoice.invoice_date, date_from, date_to)
+            if allowed:
+                invoices_in_range.append((parsed_date, invoice))
+        invoices_in_range.sort(key=lambda row: (row[0], row[1].invoice_number or ""))
+
+        invoice_numbers = [row[1].invoice_number for row in invoices_in_range if row[1].invoice_number]
+        invoice_totals_map = {}
+        if invoice_numbers:
+            for total in db.query(InvoiceTotals).filter(InvoiceTotals.invoice_number.in_(invoice_numbers)).all():
+                invoice_totals_map[total.invoice_number] = total
+
+        sell_rows_all = db.query(SellReport).all()
+        sell_summary_map = {}
+        for row in sell_rows_all:
+            allowed, parsed_date = _in_date_range(row.report_date, date_from, date_to)
+            if not allowed:
+                continue
+            bucket = sell_summary_map.setdefault(row.report_date, {
+                "parsed_date": parsed_date,
+                "total_items": 0,
+                "total_sell_amount": 0.0,
+            })
+            bucket["total_items"] += 1
+            bucket["total_sell_amount"] += float(row.sell_amount or 0.0)
+
+        finance_rows_all = db.query(SellFinance).all()
+        finances_in_range = []
+        finance_by_report_date = {}
+        for finance in finance_rows_all:
+            allowed, parsed_date = _in_date_range(finance.report_date, date_from, date_to)
+            if not allowed:
+                continue
+            finance_by_report_date[finance.report_date] = finance
+            finances_in_range.append((parsed_date, finance))
+        finances_in_range.sort(key=lambda row: (row[0], row[1].report_date or ""))
+
+        finance_ids = [row[1].id for row in finances_in_range if getattr(row[1], "id", None)]
+        expense_totals_map = {}
+        outside_income_totals_map = {}
+        if finance_ids:
+            for row in db.query(SellFinanceExpense).filter(SellFinanceExpense.finance_id.in_(finance_ids)).all():
+                expense_totals_map[row.finance_id] = expense_totals_map.get(row.finance_id, 0.0) + float(row.amount or 0.0)
+            for row in db.query(SellFinanceOutsideIncome).filter(SellFinanceOutsideIncome.finance_id.in_(finance_ids)).all():
+                outside_income_totals_map[row.finance_id] = outside_income_totals_map.get(row.finance_id, 0.0) + float(row.amount or 0.0)
+
+        if not invoices_in_range and not sell_summary_map and not finances_in_range:
+            return {"error": "no data found in selected date range"}, 404
+
+        invoice_count = len(invoices_in_range)
+        total_invoice_value = 0.0
+        total_net_invoice_value = 0.0
+        invoice_table_rows = []
+        for parsed_date, invoice in invoices_in_range:
+            totals = invoice_totals_map.get(invoice.invoice_number)
+            net_value = float(totals.net_invoice_value or 0.0) if totals else 0.0
+            invoice_value = float(totals.total_invoice_value or 0.0) if totals else 0.0
+            total_net_invoice_value += net_value
+            total_invoice_value += invoice_value
+            invoice_table_rows.append([
+                parsed_date.strftime("%Y-%m-%d"),
+                invoice.invoice_number,
+                net_value,
+                invoice_value,
+            ])
+
+        sell_summary_rows = []
+        total_sell_amount = 0.0
+        total_sell_items = 0
+        for report_date, bucket in sorted(sell_summary_map.items(), key=lambda row: (row[1]["parsed_date"], row[0])):
+            finance = finance_by_report_date.get(report_date)
+            total_sell_amount += float(bucket["total_sell_amount"] or 0.0)
+            total_sell_items += int(bucket["total_items"] or 0)
+            sell_summary_rows.append([
+                bucket["parsed_date"].strftime("%Y-%m-%d"),
+                int(bucket["total_items"] or 0),
+                float(bucket["total_sell_amount"] or 0.0),
+                float(finance.final_balance or 0.0) if finance else 0.0,
+            ])
+
+        finance_table_rows = []
+        total_expenses = 0.0
+        total_outside_income = 0.0
+        latest_final_balance = 0.0
+        if finances_in_range:
+            latest_final_balance = float(finances_in_range[-1][1].final_balance or 0.0)
+        for parsed_date, finance in finances_in_range:
+            expense_total = float(expense_totals_map.get(finance.id, 0.0))
+            outside_income_total = float(outside_income_totals_map.get(finance.id, 0.0))
+            total_expenses += expense_total
+            total_outside_income += outside_income_total
+            finance_table_rows.append([
+                parsed_date.strftime("%Y-%m-%d"),
+                float(finance.total_sell_amount or 0.0),
+                expense_total,
+                outside_income_total,
+                float(finance.final_balance or 0.0),
+            ])
+
+        overview_rows = [
+            ["Invoices Count", invoice_count],
+            ["Total Invoice Value", total_invoice_value],
+            ["Total Net Invoice Value", total_net_invoice_value],
+            ["Sell Report Days", len(sell_summary_rows)],
+            ["Sell Report Items", total_sell_items],
+            ["Total Sell Amount", total_sell_amount],
+            ["Finance Records", len(finances_in_range)],
+            ["Total Expenses", total_expenses],
+            ["Total Outside Income", total_outside_income],
+            ["Latest Final Balance", latest_final_balance],
+        ]
+        generated_by = ((request.user or {}).get("username") or "").strip() or "Nagarjun"
+        meta_rows = [
+            ["date_from", date_from.strftime("%Y-%m-%d")],
+            ["date_to", date_to.strftime("%Y-%m-%d")],
+            ["generated_by", generated_by],
+            ["generated_at", time.strftime("%Y-%m-%d %H:%M:%S")],
+        ]
+
+        out_dir = os.path.join("requested_pdf", "summary")
+        os.makedirs(out_dir, exist_ok=True)
+        filename = f"summary_{date_from.strftime('%Y-%m-%d')}_to_{date_to.strftime('%Y-%m-%d')}.pdf"
+        out_path = os.path.join(out_dir, filename)
+        write_date_range_summary_pdf(
+            out_path,
+            meta_rows,
+            overview_rows,
+            invoice_table_rows,
+            sell_summary_rows,
+            finance_table_rows,
+            title="Monthly Summary",
+        )
+        return send_file(out_path, as_attachment=True, download_name=filename)
+    finally:
+        db.close()
+
+
+@admin_bp.route("/reports/invoices/pdf", methods=["GET"])
+@admin_or_staff_required
+def invoice_date_range_pdf():
+    date_from, date_to, err, status = _parse_date_range_from_request()
+    if err:
+        return err, status
+
+    db = SessionLocal()
+    try:
+        invoice_rows_all = db.query(Invoice).all()
+        invoices_in_range = []
+        for invoice in invoice_rows_all:
+            allowed, parsed_date = _in_date_range(invoice.invoice_date, date_from, date_to)
+            if allowed:
+                invoices_in_range.append((parsed_date, invoice))
+        invoices_in_range.sort(key=lambda row: (row[0], row[1].invoice_number or ""))
+        if not invoices_in_range:
+            return {"error": "no invoices found in selected date range"}, 404
+
+        invoice_numbers = [row[1].invoice_number for row in invoices_in_range if row[1].invoice_number]
+        invoice_totals_map = {}
+        if invoice_numbers:
+            for total in db.query(InvoiceTotals).filter(InvoiceTotals.invoice_number.in_(invoice_numbers)).all():
+                invoice_totals_map[total.invoice_number] = total
+        invoice_items = []
+        if invoice_numbers:
+            invoice_items = db.query(InvoiceItem).filter(
+                InvoiceItem.invoice_number.in_(invoice_numbers)
+            ).order_by(
+                InvoiceItem.invoice_number.asc(),
+                InvoiceItem.sl_no.asc(),
+                InvoiceItem.id.asc(),
+            ).all()
+
+        total_invoice_value = 0.0
+        total_net_invoice_value = 0.0
+        total_credit_balance = 0.0
+        invoice_table_rows = []
+        for parsed_date, invoice in invoices_in_range:
+            totals = invoice_totals_map.get(invoice.invoice_number)
+            net_value = float(totals.net_invoice_value or 0.0) if totals else 0.0
+            invoice_value = float(totals.total_invoice_value or 0.0) if totals else 0.0
+            credit_balance = float(totals.retailer_credit_balance or 0.0) if totals else 0.0
+            total_net_invoice_value += net_value
+            total_invoice_value += invoice_value
+            total_credit_balance += credit_balance
+            invoice_table_rows.append([
+                parsed_date.strftime("%Y-%m-%d"),
+                invoice.invoice_number,
+                invoice.retailer_code or "",
+                invoice.uploaded_by or "",
+                net_value,
+                invoice_value,
+                credit_balance,
+            ])
+        invoice_item_rows = []
+        invoice_date_map = {
+            invoice.invoice_number: parsed_date.strftime("%Y-%m-%d")
+            for parsed_date, invoice in invoices_in_range
+        }
+        for item in invoice_items:
+            invoice_item_rows.append([
+                invoice_date_map.get(item.invoice_number, ""),
+                item.invoice_number,
+                item.brand_name or "",
+                f"{item.pack_size_case or 0}/{item.pack_size_quantity_ml or 0}ml",
+                int(item.cases_delivered or 0),
+                int(item.bottles_delivered or 0),
+                float(item.total_amount or 0.0),
+            ])
+
+        meta_rows = [
+            ["date_from", date_from.strftime("%Y-%m-%d")],
+            ["date_to", date_to.strftime("%Y-%m-%d")],
+            ["generated_by", ((request.user or {}).get("username") or "").strip() or "Nagarjun"],
+            ["generated_at", time.strftime("%Y-%m-%d %H:%M:%S")],
+        ]
+        overview_rows = [
+            ["Invoices Count", len(invoices_in_range)],
+            ["Total Net Invoice Value", total_net_invoice_value],
+            ["Total Invoice Value", total_invoice_value],
+            ["Total Retailer Credit Balance", total_credit_balance],
+        ]
+        sections = [
+            {
+                "title": "Daily Invoices",
+                "headers": ["Invoice Date", "Invoice Number", "Retailer Code", "Uploaded By", "Net Value", "Total Value", "Credit Balance"],
+                "rows": invoice_table_rows,
+                "col_widths": [24 * mm, 34 * mm, 24 * mm, 24 * mm, 24 * mm, 24 * mm, 26 * mm],
+            },
+            {
+                "title": "Daily Invoice Item Details",
+                "headers": ["Invoice Date", "Invoice Number", "Brand", "Size", "Cases", "Bottles", "Amount"],
+                "rows": invoice_item_rows,
+                "col_widths": [22 * mm, 30 * mm, 68 * mm, 18 * mm, 16 * mm, 16 * mm, 20 * mm],
+            }
+        ]
+
+        out_dir = os.path.join("requested_pdf", "invoices")
+        os.makedirs(out_dir, exist_ok=True)
+        filename = f"invoices_{date_from.strftime('%Y-%m-%d')}_to_{date_to.strftime('%Y-%m-%d')}.pdf"
+        out_path = os.path.join(out_dir, filename)
+        write_range_sections_pdf(out_path, meta_rows, overview_rows, sections, title="Invoices Date Range")
+        return send_file(out_path, as_attachment=True, download_name=filename)
+    finally:
+        db.close()
+
+
+@admin_bp.route("/reports/sell-reports/pdf", methods=["GET"])
+@admin_or_staff_required
+def sell_report_date_range_pdf():
+    date_from, date_to, err, status = _parse_date_range_from_request()
+    if err:
+        return err, status
+
+    db = SessionLocal()
+    try:
+        sell_rows_all = db.query(SellReport).order_by(
+            SellReport.report_date.asc(),
+            SellReport.created_at.asc(),
+            SellReport.id.asc(),
+        ).all()
+        finance_rows_all = db.query(SellFinance).all()
+        finance_by_report_date = {row.report_date: row for row in finance_rows_all if row.report_date}
+
+        finance_ids = [row.id for row in finance_rows_all if getattr(row, "id", None)]
+        expense_totals_map = {}
+        outside_income_totals_map = {}
+        if finance_ids:
+            for row in db.query(SellFinanceExpense).filter(SellFinanceExpense.finance_id.in_(finance_ids)).all():
+                expense_totals_map[row.finance_id] = expense_totals_map.get(row.finance_id, 0.0) + float(row.amount or 0.0)
+            for row in db.query(SellFinanceOutsideIncome).filter(SellFinanceOutsideIncome.finance_id.in_(finance_ids)).all():
+                outside_income_totals_map[row.finance_id] = outside_income_totals_map.get(row.finance_id, 0.0) + float(row.amount or 0.0)
+
+        daily_summary = {}
+        sell_item_rows = []
+        for row in sell_rows_all:
+            allowed, parsed_date = _in_date_range(row.report_date, date_from, date_to)
+            if not allowed:
+                continue
+            bucket = daily_summary.setdefault(row.report_date, {
+                "parsed_date": parsed_date,
+                "total_items": 0,
+                "total_sell_amount": 0.0,
+            })
+            bucket["total_items"] += 1
+            bucket["total_sell_amount"] += float(row.sell_amount or 0.0)
+            sell_item_rows.append([
+                parsed_date.strftime("%Y-%m-%d"),
+                row.brand_name or "",
+                f"{row.pack_size_case or 0}/{row.pack_size_quantity_ml or 0}ml",
+                int(row.sold_cases or 0),
+                int(row.sold_bottles or 0),
+                float(row.sell_amount or 0.0),
+            ])
+
+        finance_range_rows = []
+        for finance in finance_rows_all:
+            allowed, parsed_date = _in_date_range(finance.report_date, date_from, date_to)
+            if not allowed:
+                continue
+            finance_range_rows.append((parsed_date, finance))
+        finance_range_rows.sort(key=lambda row: (row[0], row[1].report_date or ""))
+
+        if not daily_summary and not finance_range_rows:
+            return {"error": "no sell reports found in selected date range"}, 404
+
+        total_sell_amount = 0.0
+        total_sell_items = 0
+        latest_final_balance = 0.0
+        daily_rows = []
+        for report_date, bucket in sorted(daily_summary.items(), key=lambda row: (row[1]["parsed_date"], row[0])):
+            finance = finance_by_report_date.get(report_date)
+            total_sell_amount += float(bucket["total_sell_amount"] or 0.0)
+            total_sell_items += int(bucket["total_items"] or 0)
+            final_balance = float(finance.final_balance or 0.0) if finance else 0.0
+            latest_final_balance = final_balance or latest_final_balance
+            daily_rows.append([
+                bucket["parsed_date"].strftime("%Y-%m-%d"),
+                int(bucket["total_items"] or 0),
+                float(bucket["total_sell_amount"] or 0.0),
+                final_balance,
+            ])
+
+        finance_daily_rows = []
+        total_expenses = 0.0
+        total_outside_income = 0.0
+        for parsed_date, finance in finance_range_rows:
+            expense_total = float(expense_totals_map.get(finance.id, 0.0))
+            outside_income_total = float(outside_income_totals_map.get(finance.id, 0.0))
+            total_expenses += expense_total
+            total_outside_income += outside_income_total
+            latest_final_balance = float(finance.final_balance or 0.0)
+            finance_daily_rows.append([
+                parsed_date.strftime("%Y-%m-%d"),
+                float(finance.total_sell_amount or 0.0),
+                expense_total,
+                outside_income_total,
+                float(finance.final_balance or 0.0),
+            ])
+
+        meta_rows = [
+            ["date_from", date_from.strftime("%Y-%m-%d")],
+            ["date_to", date_to.strftime("%Y-%m-%d")],
+            ["generated_by", ((request.user or {}).get("username") or "").strip() or "Nagarjun"],
+            ["generated_at", time.strftime("%Y-%m-%d %H:%M:%S")],
+        ]
+        overview_rows = [
+            ["Sell Report Days", len(daily_rows)],
+            ["Sell Report Items", total_sell_items],
+            ["Total Sell Amount", total_sell_amount],
+            ["Finance Records", len(finance_range_rows)],
+            ["Total Expenses", total_expenses],
+            ["Total Outside Income", total_outside_income],
+            ["Latest Final Balance", latest_final_balance],
+        ]
+        sections = [
+            {
+                "title": "Daily Sell Reports",
+                "headers": ["Report Date", "Items", "Sell Amount", "Final Balance"],
+                "rows": daily_rows,
+                "col_widths": [38 * mm, 28 * mm, 50 * mm, 50 * mm],
+            },
+            {
+                "title": "Daily Sell Report Item Details",
+                "headers": ["Report Date", "Brand", "Size", "Sold(C)", "Sold(B)", "Amount"],
+                "rows": sell_item_rows,
+                "col_widths": [24 * mm, 66 * mm, 22 * mm, 18 * mm, 18 * mm, 28 * mm],
+            },
+            {
+                "title": "Daily Finance",
+                "headers": ["Report Date", "Sell Amount", "Expenses", "Outside Income", "Final Balance"],
+                "rows": finance_daily_rows,
+                "col_widths": [28 * mm, 34 * mm, 34 * mm, 40 * mm, 40 * mm],
+            },
+        ]
+
+        out_dir = os.path.join("requested_pdf", "sellreport")
+        os.makedirs(out_dir, exist_ok=True)
+        filename = f"sell_reports_{date_from.strftime('%Y-%m-%d')}_to_{date_to.strftime('%Y-%m-%d')}.pdf"
+        out_path = os.path.join(out_dir, filename)
+        write_range_sections_pdf(out_path, meta_rows, overview_rows, sections, title="Sell Reports Date Range")
+        return send_file(out_path, as_attachment=True, download_name=filename)
     finally:
         db.close()
 

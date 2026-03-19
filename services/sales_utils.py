@@ -19,7 +19,10 @@ from models import (
 def get_last_reports_by_stock(db):
     last_reports = {}
     try:
-        rows = db.query(SellReport).order_by(SellReport.created_at.desc()).all()
+        rows = db.query(SellReport).order_by(
+            SellReport.report_date.desc(),
+            SellReport.created_at.desc()
+        ).all()
         for r in rows:
             if r.stock_id not in last_reports:
                 last_reports[r.stock_id] = r
@@ -37,10 +40,49 @@ def get_previous_report(db, stock_id, before_dt):
     ).order_by(SellReport.created_at.desc()).first()
 
 
-def invoice_additions(db, stock, since_dt):
+def get_invoice_date_bounds(db):
+    try:
+        invoices = db.query(Invoice).order_by(Invoice.id.asc()).all()
+    except OperationalError:
+        return {
+            "first_invoice_date": "",
+            "first_invoice_date_iso": "",
+            "latest_invoice_date": "",
+            "latest_invoice_date_iso": "",
+        }
+
+    parsed_rows = []
+    for invoice in invoices:
+        invoice_dt = parse_report_date(invoice.invoice_date)
+        if invoice_dt:
+            parsed_rows.append((invoice_dt, invoice))
+
+    if not parsed_rows:
+        first_invoice = invoices[0] if invoices else None
+        latest_invoice = invoices[-1] if invoices else None
+        return {
+            "first_invoice_date": first_invoice.invoice_date if first_invoice else "",
+            "first_invoice_date_iso": "",
+            "latest_invoice_date": latest_invoice.invoice_date if latest_invoice else "",
+            "latest_invoice_date_iso": "",
+        }
+
+    parsed_rows.sort(key=lambda row: (row[0], int(row[1].id or 0)))
+    first_invoice_dt, first_invoice = parsed_rows[0]
+    latest_invoice_dt, latest_invoice = parsed_rows[-1]
+    return {
+        "first_invoice_date": first_invoice.invoice_date or "",
+        "first_invoice_date_iso": first_invoice_dt.strftime("%Y-%m-%d"),
+        "latest_invoice_date": latest_invoice.invoice_date or "",
+        "latest_invoice_date_iso": latest_invoice_dt.strftime("%Y-%m-%d"),
+    }
+
+
+def invoice_additions(db, stock, since_report_dt=None, upto_report_dt=None):
     q = db.query(
-        func.coalesce(func.sum(InvoiceItem.cases_delivered), 0),
-        func.coalesce(func.sum(InvoiceItem.bottles_delivered), 0)
+        Invoice.invoice_date,
+        InvoiceItem.cases_delivered,
+        InvoiceItem.bottles_delivered,
     ).join(Invoice, Invoice.invoice_number == InvoiceItem.invoice_number)
 
     q = q.filter(
@@ -49,27 +91,48 @@ def invoice_additions(db, stock, since_dt):
         InvoiceItem.pack_size_quantity_ml == stock.pack_size_quantity_ml,
     )
 
-    if since_dt is not None:
-        q = q.filter(Invoice.created_at > since_dt)
+    cases = 0
+    bottles = 0
+    for invoice_date, row_cases, row_bottles in q.all():
+        invoice_dt = parse_report_date(invoice_date)
+        if invoice_dt is None:
+            if since_report_dt is not None or upto_report_dt is not None:
+                continue
+        else:
+            if since_report_dt is not None and invoice_dt <= since_report_dt:
+                continue
+            if upto_report_dt is not None and invoice_dt > upto_report_dt:
+                continue
+        cases += int(row_cases or 0)
+        bottles += int(row_bottles or 0)
 
-    cases, bottles = q.first()
-    return int(cases or 0), int(bottles or 0)
+    return cases, bottles
 
 
 def total_bottles(cases, loose_bottles, pack_size_case):
     return int(cases or 0) * int(pack_size_case or 0) + int(loose_bottles or 0)
 
 
-def compute_opening_and_additions(db, stock, last_report):
+def compute_opening_and_additions(db, stock, last_report, upto_report_dt=None):
     if last_report:
         opening_cases = last_report.closing_cases
         opening_bottles = last_report.closing_bottles
-        since_dt = last_report.created_at
-        added_cases, added_bottles = invoice_additions(db, stock, since_dt)
+        since_report_dt = parse_report_date(last_report.report_date)
+        added_cases, added_bottles = invoice_additions(
+            db,
+            stock,
+            since_report_dt=since_report_dt,
+            upto_report_dt=upto_report_dt,
+        )
     else:
         opening_cases = 0
         opening_bottles = 0
-        added_cases, added_bottles = invoice_additions(db, stock, None)
+        added_cases, added_bottles = invoice_additions(
+            db,
+            stock,
+            since_report_dt=None,
+            upto_report_dt=upto_report_dt,
+        )
 
     total_cases = int(opening_cases or 0) + int(added_cases or 0)
     opening_total_bottles = total_bottles(opening_cases, opening_bottles, stock.pack_size_case)

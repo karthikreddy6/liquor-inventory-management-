@@ -15,6 +15,7 @@ from models import (
 )
 from services.audit import log_action
 from services.sales_utils import (
+    get_invoice_date_bounds,
     get_last_finance_balance,
     get_total_sell_amount,
     normalize_money_entries,
@@ -53,18 +54,20 @@ def create_sell_finance():
         SellFinanceCash.__table__.create(bind=db.get_bind(), checkfirst=True)
         SellFinanceOutsideIncome.__table__.create(bind=db.get_bind(), checkfirst=True)
 
-        latest_invoice = db.query(Invoice).order_by(Invoice.id.desc()).first()
-        if not latest_invoice:
+        invoice_bounds = get_invoice_date_bounds(db)
+        first_invoice_date = invoice_bounds.get("first_invoice_date", "")
+        first_invoice_date_iso = invoice_bounds.get("first_invoice_date_iso", "")
+        latest_invoice_date = invoice_bounds.get("latest_invoice_date", "")
+        latest_invoice_date_iso = invoice_bounds.get("latest_invoice_date_iso", "")
+        if not first_invoice_date_iso:
             return {"error": "no invoices found"}, 400
-        latest_invoice_date = latest_invoice.invoice_date
-        latest_invoice_dt = parse_report_date(latest_invoice_date)
-        if not latest_invoice_dt:
-            return {"error": "invalid latest invoice date format"}, 400
+
         report_dt = parse_report_date(report_date)
         if not report_dt:
             return {"error": "invalid report_date format"}, 400
-        if report_dt < latest_invoice_dt:
-            return {"error": "report_date must be on or after last invoice date"}, 400
+        first_invoice_dt = parse_report_date(first_invoice_date_iso)
+        if first_invoice_dt and report_dt < first_invoice_dt:
+            return {"error": "report_date must be on or after first invoice date"}, 400
 
         sell_report_exists = db.query(SellReport).filter(
             SellReport.report_date == report_date
@@ -235,7 +238,11 @@ def create_sell_finance():
             "phonepay_entries": cleaned_phonepay_entries,
             "cash_entries": cleaned_cash_entries,
             "outside_income": cleaned_outside_income,
-            "expenses": cleaned_expenses
+            "expenses": cleaned_expenses,
+            "first_invoice_date": first_invoice_date,
+            "first_invoice_date_iso": first_invoice_date_iso,
+            "latest_invoice_date": latest_invoice_date,
+            "latest_invoice_date_iso": latest_invoice_date_iso,
         })
     finally:
         db.close()
@@ -254,8 +261,11 @@ def prepare_sell_finance():
         SellFinanceCash.__table__.create(bind=db.get_bind(), checkfirst=True)
         SellFinanceOutsideIncome.__table__.create(bind=db.get_bind(), checkfirst=True)
 
-        latest_invoice = db.query(Invoice).order_by(Invoice.id.desc()).first()
-        latest_invoice_date = latest_invoice.invoice_date if latest_invoice else ""
+        invoice_bounds = get_invoice_date_bounds(db)
+        first_invoice_date = invoice_bounds.get("first_invoice_date", "")
+        first_invoice_date_iso = invoice_bounds.get("first_invoice_date_iso", "")
+        latest_invoice_date = invoice_bounds.get("latest_invoice_date", "")
+        latest_invoice_date_iso = invoice_bounds.get("latest_invoice_date_iso", "")
         report_dt = parse_report_date(report_date)
         if not report_dt:
             return {"error": "invalid report_date format"}, 400
@@ -332,7 +342,10 @@ def prepare_sell_finance():
             "cash_entries": cash_entries,
             "outside_income": outside_income,
             "expenses": expenses,
+            "first_invoice_date": first_invoice_date,
+            "first_invoice_date_iso": first_invoice_date_iso,
             "latest_invoice_date": latest_invoice_date,
+            "latest_invoice_date_iso": latest_invoice_date_iso,
             "allowed_entry_date_from": min_allowed_date,
             "allowed_entry_date_to": report_date
         })

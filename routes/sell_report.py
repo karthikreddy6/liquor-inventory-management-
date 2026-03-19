@@ -7,7 +7,6 @@ from flask import Blueprint, jsonify, request
 from auth import auth_required
 from database import SessionLocal
 from models import (
-    Invoice,
     PresentStockDetail,
     PriceListItem,
     SellReport,
@@ -19,6 +18,7 @@ from services.sales_utils import (
     build_finance_payload,
     build_mrp_map,
     compute_opening_and_additions,
+    get_invoice_date_bounds,
     get_last_finance_balance,
     get_last_reports_by_stock,
     get_previous_report,
@@ -56,9 +56,8 @@ def _get_sell_report_base_date(db):
     if last_sell_report_date:
         return last_sell_report_date, "last sell report date"
 
-    latest_invoice = db.query(Invoice).order_by(Invoice.id.desc()).first()
-    latest_invoice_date = latest_invoice.invoice_date if latest_invoice else ""
-    return latest_invoice_date, "last invoice date"
+    invoice_bounds = get_invoice_date_bounds(db)
+    return invoice_bounds.get("first_invoice_date_iso", ""), "first invoice date"
 
 
 def _get_user_brand_sort_order(db, username):
@@ -155,6 +154,7 @@ def prepare_sell_report():
     db = SessionLocal()
     try:
         sort_mode = request.args.get("sort_mode", "alpha")
+        requested_report_date = str(request.args.get("report_date") or "").strip()
         username = (request.user or {}).get("username")
         user_brand_order = _get_user_brand_sort_order(db, username)
         user_alias_map = _get_user_brand_alias_map(db, username)
@@ -162,10 +162,29 @@ def prepare_sell_report():
         stocks = _sort_stocks(stocks, sort_mode, user_brand_order)
         last_reports = get_last_reports_by_stock(db)
         mrp_map = build_mrp_map(db)
-        latest_invoice = db.query(Invoice).order_by(Invoice.id.desc()).first()
-        actual_latest_invoice_date = latest_invoice.invoice_date if latest_invoice else ""
+        invoice_bounds = get_invoice_date_bounds(db)
+        first_invoice_date = invoice_bounds.get("first_invoice_date", "")
+        first_invoice_date_iso = invoice_bounds.get("first_invoice_date_iso", "")
+        actual_latest_invoice_date = invoice_bounds.get("latest_invoice_date", "")
+        actual_latest_invoice_date_iso = invoice_bounds.get("latest_invoice_date_iso", "")
         last_sell_report_date = _get_last_sell_report_date(db)
-        base_report_date = last_sell_report_date or actual_latest_invoice_date
+        base_report_date, base_date_label = _get_sell_report_base_date(db)
+        selected_report_date = requested_report_date
+        if not selected_report_date:
+            latest_invoice_dt = parse_report_date(actual_latest_invoice_date_iso)
+            last_sell_report_dt = parse_report_date(last_sell_report_date)
+            if latest_invoice_dt and (last_sell_report_dt is None or latest_invoice_dt >= last_sell_report_dt):
+                selected_report_date = actual_latest_invoice_date_iso
+            else:
+                selected_report_date = last_sell_report_date or first_invoice_date_iso
+
+        selected_report_dt = parse_report_date(selected_report_date) if selected_report_date else None
+        base_report_dt = parse_report_date(base_report_date) if base_report_date else None
+        if selected_report_date and not selected_report_dt:
+            return {"error": "invalid report_date format"}, 400
+        if base_report_dt and selected_report_dt and selected_report_dt < base_report_dt:
+            return {"error": f"report_date must be on or after {base_date_label}"}, 400
+
         last_balance_amount = get_last_finance_balance(db)
         payload = []
 
@@ -174,7 +193,7 @@ def prepare_sell_report():
             mrp_key = (str(stock.brand_number or "").strip(), int(stock.pack_size_quantity_ml or 0))
             mrp = mrp_map.get(mrp_key)
             opening_cases, opening_bottles, added_cases, added_bottles, total_cases, total_bottles_value = (
-                compute_opening_and_additions(db, stock, last_report)
+                compute_opening_and_additions(db, stock, last_report, selected_report_dt)
             )
 
             payload.append({
@@ -198,10 +217,14 @@ def prepare_sell_report():
 
         return jsonify({
             "items": payload,
+            "first_invoice_date": first_invoice_date,
+            "first_invoice_date_iso": first_invoice_date_iso,
             "latest_invoice_date": actual_latest_invoice_date,
+            "latest_invoice_date_iso": actual_latest_invoice_date_iso,
             "actual_latest_invoice_date": actual_latest_invoice_date,
             "last_sell_report_date": last_sell_report_date,
             "base_report_date": base_report_date,
+            "selected_report_date": selected_report_date,
             "last_balance_amount": last_balance_amount,
             "sort_mode": str(sort_mode or "alpha").strip().lower(),
             "custom_brand_order": user_brand_order,
@@ -534,7 +557,7 @@ def create_sell_report():
 
             last_report = last_reports.get(stock.id)
             opening_cases, opening_bottles, added_cases, added_bottles, total_cases, total_bottles_value = (
-                compute_opening_and_additions(db, stock, last_report)
+                compute_opening_and_additions(db, stock, last_report, report_dt)
             )
 
             closing_total_bottles = total_bottles(closing_cases, closing_bottles, stock.pack_size_case)
@@ -693,7 +716,12 @@ def edit_last_sell_report():
 
             prev_report = get_previous_report(db, stock_id, report.created_at)
             opening_cases, opening_bottles, added_cases, added_bottles, total_cases, total_bottles_value = (
-                compute_opening_and_additions(db, stock, prev_report)
+                compute_opening_and_additions(
+                    db,
+                    stock,
+                    prev_report,
+                    parse_report_date(report.report_date),
+                )
             )
 
             closing_total_bottles = total_bottles(closing_cases, closing_bottles, stock.pack_size_case)
