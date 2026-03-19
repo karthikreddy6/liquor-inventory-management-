@@ -693,11 +693,50 @@ def invoice_pdf(invoice_number):
         if not invoice: return {"error": "not found"}, 404
         totals = db.query(InvoiceTotals).filter(InvoiceTotals.invoice_number == invoice_number).first()
         items = db.query(InvoiceItem).filter(InvoiceItem.invoice_number == invoice_number).order_by(InvoiceItem.sl_no.asc()).all()
-        meta_rows = [["Invoice Number", invoice.invoice_number], ["Invoice Date", invoice.invoice_date], ["Retailer", f"{invoice.retailer_name} ({invoice.retailer_code})"]]
-        totals_rows = [[k, v] for k, v in [["Value", totals.invoice_value], ["Net", totals.net_invoice_value]]] if totals else []
-        items_rows = [["#", "Brand", "Pack", "Cases", "Bottles", "Total"]]
+        meta_rows = {
+            "invoice_meta": {
+                "invoice_number": invoice.invoice_number,
+                "invoice_date": invoice.invoice_date,
+            },
+            "retailer": {
+                "name": invoice.retailer_name,
+                "code": invoice.retailer_code,
+            },
+            "licensee": {
+                "pan": invoice.licensee_pan,
+            },
+        }
+        totals_rows = {
+            "e_challan_amount": totals.e_challan_amount if totals else 0,
+            "previous_credit": totals.previous_credit if totals else 0,
+            "sub_total": totals.sub_total if totals else 0,
+            "special_excise_cess": totals.special_excise_cess if totals else 0,
+            "tcs": totals.tcs if totals else 0,
+            "new_retailer_professional_tax": totals.new_retailer_professional_tax if totals else 0,
+            "retail_shop_excise_turnover_tax": totals.retail_shop_excise_turnover_tax if totals else 0,
+            "less_this_invoice_value": totals.less_this_invoice_value if totals else 0,
+            "retailer_credit_balance": totals.retailer_credit_balance if totals else 0,
+            "invoice_value": totals.invoice_value if totals else 0,
+            "mrp_round_off": totals.mrp_round_off if totals else 0,
+            "net_invoice_value": totals.net_invoice_value if totals else 0,
+            "total_invoice_value": totals.total_invoice_value if totals else 0,
+        }
+        items_rows = []
         for it in items:
-            items_rows.append([it.sl_no, it.brand_name, f"{it.pack_size_case}/{it.pack_size_quantity_ml}ml", it.cases_delivered, it.bottles_delivered, it.total_amount])
+            items_rows.append({
+                "sl_no": it.sl_no,
+                "brand_number": it.brand_number,
+                "brand_name": it.brand_name,
+                "product_type": it.product_type,
+                "pack_type": it.pack_type,
+                "pack_size_case": it.pack_size_case,
+                "pack_size_quantity_ml": it.pack_size_quantity_ml,
+                "cases_delivered": it.cases_delivered,
+                "bottles_delivered": it.bottles_delivered,
+                "rate_per_case": it.rate_per_case,
+                "unit_rate_per_bottle": it.unit_rate_per_bottle,
+                "total_amount": it.total_amount,
+            })
         out_dir = os.path.join("requested_pdf", "invoices")
         os.makedirs(out_dir, exist_ok=True)
         filename = f"{invoice.invoice_number}.pdf"
@@ -715,17 +754,69 @@ def sell_report_pdf(report_date):
         rows = db.query(SellReport).filter(SellReport.report_date == report_date).all()
         if not rows: return {"error": "not found"}, 404
         fin = db.query(SellFinance).filter(SellFinance.report_date == report_date).first()
-        meta_rows = [["Sell Report Date", report_date], ["Created By", rows[0].created_by]]
+        generated_by = ((request.user or {}).get("username") or "").strip() or "Nagarjun"
+        created_by = ""
+        if fin and getattr(fin, "created_by", None):
+            created_by = str(fin.created_by).strip()
+        if not created_by:
+            created_by = str(rows[0].created_by or "").strip()
+        total_sell_amount = float(fin.total_sell_amount or 0.0) if fin else float(sum(float(r.sell_amount or 0.0) for r in rows))
+        final_balance = float(fin.final_balance or 0.0) if fin else 0.0
+        finance_sections = []
+        if fin and getattr(fin, "id", None):
+            phonepay_rows = db.query(SellFinancePhonePay).filter(
+                SellFinancePhonePay.finance_id == fin.id
+            ).order_by(SellFinancePhonePay.txn_date.asc(), SellFinancePhonePay.id.asc()).all()
+            cash_rows = db.query(SellFinanceCash).filter(
+                SellFinanceCash.finance_id == fin.id
+            ).order_by(SellFinanceCash.txn_date.asc(), SellFinanceCash.id.asc()).all()
+            outside_income_rows = db.query(SellFinanceOutsideIncome).filter(
+                SellFinanceOutsideIncome.finance_id == fin.id
+            ).order_by(SellFinanceOutsideIncome.id.asc()).all()
+            expense_rows = db.query(SellFinanceExpense).filter(
+                SellFinanceExpense.finance_id == fin.id
+            ).order_by(SellFinanceExpense.id.asc()).all()
+
+            finance_sections = [
+                {
+                    "title": "PhonePe (UPI) By Date",
+                    "headers": ["Date", "Amount (Rs.)"],
+                    "rows": [[str(r.txn_date or ""), float(r.amount or 0.0)] for r in phonepay_rows],
+                },
+                {
+                    "title": "Cash Collected By Date",
+                    "headers": ["Date", "Amount (Rs.)"],
+                    "rows": [[str(r.txn_date or ""), float(r.amount or 0.0)] for r in cash_rows],
+                },
+                {
+                    "title": "Outside Income",
+                    "headers": ["Name", "Amount (Rs.)"],
+                    "rows": [[str(r.name or ""), float(r.amount or 0.0)] for r in outside_income_rows],
+                },
+                {
+                    "title": "Outbound Expenses",
+                    "headers": ["Name", "Amount (Rs.)"],
+                    "rows": [[str(r.name or ""), float(r.amount or 0.0)] for r in expense_rows],
+                },
+            ]
+        meta_rows = [
+            ["report_date", report_date],
+            ["generated_by", generated_by],
+            ["created_by", created_by],
+        ]
         items_rows = [["Brand", "Size", "Sold(c)", "Sold(b)", "Amount"]]
         for r in rows:
             items_rows.append([r.brand_name, f"{r.pack_size_case}/{r.pack_size_quantity_ml}ml", r.sold_cases, r.sold_bottles, r.sell_amount])
-        finance_rows = [[k, v] for k, v in [["Total Sell", fin.total_sell_amount], ["Final Balance", fin.final_balance]]] if fin else []
+        finance_rows = [
+            ["total_sell", total_sell_amount],
+            ["final_balance", final_balance],
+        ]
         out_dir = os.path.join("requested_pdf", "sellreport")
         os.makedirs(out_dir, exist_ok=True)
         safe_date = str(report_date).replace("/", "-")
         filename = f"sell_report_{safe_date}.pdf"
         out_path = os.path.join(out_dir, filename)
-        write_sell_report_pdf(out_path, meta_rows, items_rows, finance_rows, [], title="Sell Report")
+        write_sell_report_pdf(out_path, meta_rows, items_rows, finance_rows, finance_sections, title="Sell Report")
         return send_file(out_path, as_attachment=True, download_name=filename)
     finally:
         db.close()
@@ -739,6 +830,7 @@ def present_stock_pdf():
         if not rows:
             return {"error": "no stock data"}, 404
         summary = db.query(StockSummary).first()
+        total_bottles_all_items = sum(((r.total_cases or 0) * (r.pack_size_case or 0)) + (r.total_bottles or 0) for r in rows)
 
         meta_rows = [
             ["Generated At", time.strftime("%Y-%m-%d %H:%M:%S")],
@@ -747,7 +839,7 @@ def present_stock_pdf():
         summary_rows = []
         if summary:
             summary_rows = [
-                ["Total Cases (All Items)", summary.total_cases_all_items],
+                ["Total Bottles (All Items)", total_bottles_all_items],
                 ["Total Amount (All Items)", summary.total_price_all_items],
             ]
 

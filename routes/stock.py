@@ -8,6 +8,16 @@ from services.pdf_export import write_present_stock_pdf
 
 stock_bp = Blueprint("stock", __name__)
 
+
+def _total_bottles_all_items(rows):
+    total = 0
+    for row in rows or []:
+        pack_size_case = int(row.pack_size_case or 0)
+        total_cases = int(row.total_cases or 0)
+        total_bottles = int(row.total_bottles or 0)
+        total += (total_cases * pack_size_case) + total_bottles
+    return total
+
 @stock_bp.route("/stock", methods=["GET"])
 @auth_required()
 def get_stock():
@@ -15,6 +25,7 @@ def get_stock():
     try:
         rows = db.query(PresentStockDetail).all()
         summary = db.query(StockSummary).first()
+        total_bottles_all_items = _total_bottles_all_items(rows)
         stock = []
         for r in rows:
             stock.append({
@@ -37,7 +48,7 @@ def get_stock():
         summary_payload = None
         if summary:
             summary_payload = {
-                "total_cases_all_items": summary.total_cases_all_items,
+                "total_bottles_all_items": total_bottles_all_items,
                 "total_price_all_items": summary.total_price_all_items,
                 "last_updated_item_name": summary.last_updated_item_name,
                 "updated_at": summary.updated_at.isoformat() if summary.updated_at else None
@@ -55,6 +66,7 @@ def download_present_stock_pdf():
         if not rows:
             return {"error": "no stock data"}, 404
         summary = db.query(StockSummary).first()
+        total_bottles_all_items = _total_bottles_all_items(rows)
 
         meta_rows = [
             ["Generated At", time.strftime("%Y-%m-%d %H:%M:%S")],
@@ -63,7 +75,7 @@ def download_present_stock_pdf():
         summary_rows = []
         if summary:
             summary_rows = [
-                ["Total Cases (All Items)", summary.total_cases_all_items],
+                ["Total Bottles (All Items)", total_bottles_all_items],
                 ["Total Amount (All Items)", summary.total_price_all_items],
             ]
 

@@ -43,6 +43,24 @@ def _stock_alpha_key(stock):
     )
 
 
+def _get_last_sell_report_date(db):
+    latest_sell_report = db.query(SellReport).order_by(
+        SellReport.report_date.desc(),
+        SellReport.created_at.desc()
+    ).first()
+    return latest_sell_report.report_date if latest_sell_report else ""
+
+
+def _get_sell_report_base_date(db):
+    last_sell_report_date = _get_last_sell_report_date(db)
+    if last_sell_report_date:
+        return last_sell_report_date, "last sell report date"
+
+    latest_invoice = db.query(Invoice).order_by(Invoice.id.desc()).first()
+    latest_invoice_date = latest_invoice.invoice_date if latest_invoice else ""
+    return latest_invoice_date, "last invoice date"
+
+
 def _get_user_brand_sort_order(db, username):
     if not username:
         return []
@@ -145,9 +163,9 @@ def prepare_sell_report():
         last_reports = get_last_reports_by_stock(db)
         mrp_map = build_mrp_map(db)
         latest_invoice = db.query(Invoice).order_by(Invoice.id.desc()).first()
-        latest_invoice_date = latest_invoice.invoice_date if latest_invoice else ""
-        latest_sell_report = db.query(SellReport).order_by(SellReport.created_at.desc()).first()
-        last_sell_report_date = latest_sell_report.report_date if latest_sell_report else ""
+        actual_latest_invoice_date = latest_invoice.invoice_date if latest_invoice else ""
+        last_sell_report_date = _get_last_sell_report_date(db)
+        base_report_date = last_sell_report_date or actual_latest_invoice_date
         last_balance_amount = get_last_finance_balance(db)
         payload = []
 
@@ -180,8 +198,10 @@ def prepare_sell_report():
 
         return jsonify({
             "items": payload,
-            "latest_invoice_date": latest_invoice_date,
+            "latest_invoice_date": actual_latest_invoice_date,
+            "actual_latest_invoice_date": actual_latest_invoice_date,
             "last_sell_report_date": last_sell_report_date,
+            "base_report_date": base_report_date,
             "last_balance_amount": last_balance_amount,
             "sort_mode": str(sort_mode or "alpha").strip().lower(),
             "custom_brand_order": user_brand_order,
@@ -470,17 +490,16 @@ def create_sell_report():
 
     db = SessionLocal()
     try:
-        latest_invoice = db.query(Invoice).order_by(Invoice.id.desc()).first()
-        if not latest_invoice:
+        base_report_date, base_date_label = _get_sell_report_base_date(db)
+        if not base_report_date:
             return {"error": "no invoices found"}, 400
 
-        latest_invoice_date = latest_invoice.invoice_date
         report_dt = parse_report_date(report_date)
-        invoice_dt = parse_report_date(latest_invoice_date)
-        if not report_dt or not invoice_dt:
-            return {"error": "invalid report_date or invoice_date format"}, 400
-        if report_dt < invoice_dt:
-            return {"error": "report_date must be on or after last invoice date"}, 400
+        base_dt = parse_report_date(base_report_date)
+        if not report_dt or not base_dt:
+            return {"error": f"invalid report_date or {base_date_label.replace(' ', '_')} format"}, 400
+        if report_dt < base_dt:
+            return {"error": f"report_date must be on or after {base_date_label}"}, 400
 
         existing_today = db.query(SellReport).filter(SellReport.report_date == report_date).first()
         if existing_today:
