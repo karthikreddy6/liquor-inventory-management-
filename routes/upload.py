@@ -3,14 +3,45 @@ from werkzeug.utils import secure_filename
 import os
 from datetime import datetime
 from database import SessionLocal
-from models import Invoice, InvoiceItem, InvoiceTotals, PresentStockDetail, StockSummary, PriceListItem
+from models import Invoice, InvoiceItem, InvoiceTotals, PresentStockDetail, StockSummary, PriceListItem, SellReport
 from pdf_parser import parse_invoice_pdf
 from config import INVOICES_FOLDER
 from services.files import save_invoice_file
 from auth import auth_required
 from services.audit import log_action
+from services.sales_utils import parse_report_date
 
 upload_bp = Blueprint("upload", __name__)
+
+
+def _get_latest_sell_report(db):
+    return db.query(SellReport).order_by(
+        SellReport.report_date.desc(),
+        SellReport.created_at.desc()
+    ).first()
+
+
+def _validate_invoice_date_after_latest_sell_report(db, invoice_date):
+    invoice_dt = parse_report_date(invoice_date)
+    if invoice_date and invoice_dt is None:
+        return f"Invalid invoice date format: {invoice_date}"
+
+    latest_sell_report = _get_latest_sell_report(db)
+    if not latest_sell_report or not latest_sell_report.report_date or invoice_dt is None:
+        return None
+
+    latest_sell_report_dt = parse_report_date(latest_sell_report.report_date)
+    if latest_sell_report_dt is None:
+        return None
+
+    if invoice_dt <= latest_sell_report_dt:
+        return (
+            "Invoice date must be after the latest sell report date. "
+            f"Invoice date: {invoice_dt.strftime('%Y-%m-%d')}. "
+            f"Latest sell report date: {latest_sell_report_dt.strftime('%Y-%m-%d')}."
+        )
+
+    return None
 
 @upload_bp.route("/upload/preview", methods=["POST"])
 @auth_required()
@@ -31,14 +62,20 @@ def upload_preview():
         if retailer_code != "2500552":
             return {"error": "Retailer code mismatch. Expected 2500552."}, 400
         invoice_number = data.get("invoice_meta", {}).get("invoice_number", "")
-        if invoice_number:
-            db = SessionLocal()
-            try:
+        db = SessionLocal()
+        try:
+            invoice_date_error = _validate_invoice_date_after_latest_sell_report(
+                db,
+                data.get("invoice_meta", {}).get("invoice_date", "")
+            )
+            if invoice_date_error:
+                return {"error": invoice_date_error}, 400
+            if invoice_number:
                 exists = db.query(Invoice).filter(Invoice.invoice_number == invoice_number).first()
                 if exists:
                     return {"error": f"Invoice already exists: {invoice_number}"}, 409
-            finally:
-                db.close()
+        finally:
+            db.close()
         return jsonify({"preview": data})
     finally:
         try:
@@ -63,14 +100,23 @@ def upload_pdf():
         if os.path.exists(path):
             os.remove(path)
         return {"error": "Retailer code mismatch. Expected 2500552."}, 400
-    save_invoice_file(
-        upload_path=path,
-        invoice_date=data.get("invoice_meta", {}).get("invoice_date", ""),
-        invoice_number=data.get("invoice_meta", {}).get("invoice_number", "")
-    )
 
     db = SessionLocal()
     try:
+        invoice_date_error = _validate_invoice_date_after_latest_sell_report(
+            db,
+            data.get("invoice_meta", {}).get("invoice_date", "")
+        )
+        if invoice_date_error:
+            if os.path.exists(path):
+                os.remove(path)
+            return {"error": invoice_date_error}, 400
+        save_invoice_file(
+            upload_path=path,
+            invoice_date=data.get("invoice_meta", {}).get("invoice_date", ""),
+            invoice_number=data.get("invoice_meta", {}).get("invoice_number", "")
+        )
+
         invoice = Invoice(
             invoice_number=data["invoice_meta"]["invoice_number"],
             invoice_date=data["invoice_meta"]["invoice_date"],
