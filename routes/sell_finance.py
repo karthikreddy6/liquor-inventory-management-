@@ -24,6 +24,21 @@ from services.sales_utils import (
 
 sell_finance_bp = Blueprint("sell_finance", __name__)
 
+def _get_sell_finance_base_date(db, report_date=None):
+    previous_sell_report_query = db.query(SellReport)
+    if report_date:
+        previous_sell_report_query = previous_sell_report_query.filter(
+            SellReport.report_date < report_date
+        )
+    previous_sell_report = previous_sell_report_query.order_by(
+        SellReport.report_date.desc(),
+        SellReport.created_at.desc(),
+    ).first()
+    if previous_sell_report and previous_sell_report.report_date:
+        return previous_sell_report.report_date, "last sell report date"
+
+    invoice_bounds = get_invoice_date_bounds(db)
+    return invoice_bounds.get("first_invoice_date_iso", ""), "first invoice date" 
 
 @sell_finance_bp.route("/seller/sell-finance", methods=["POST"])
 @auth_required()
@@ -79,16 +94,13 @@ def create_sell_finance():
             SellFinance.report_date == report_date
         ).first()
 
-        previous_sell_report = db.query(SellReport).filter(
-            SellReport.report_date < report_date
-        ).order_by(SellReport.report_date.desc()).first()
-        min_allowed_dt = parse_report_date(previous_sell_report.report_date) if previous_sell_report else report_dt
+        base_report_date, base_date_label = _get_sell_finance_base_date(db, report_date)
+        min_allowed_dt = parse_report_date(base_report_date) if base_report_date else None
         if not min_allowed_dt:
             min_allowed_dt = report_dt
             min_allowed_label = "selected sell report date"
         else:
-            min_allowed_label = "previous sell report date" if previous_sell_report else "selected sell report date"
-
+            min_allowed_label = base_date_label
         last_balance_amount = get_last_finance_balance(db, finance.id if finance else None)
         total_sell_amount = get_total_sell_amount(db, report_date)
 
@@ -274,10 +286,8 @@ def prepare_sell_finance():
         ).first()
         if not sell_report_exists:
             return {"error": "sell report not found for this date"}, 404
-        previous_sell_report = db.query(SellReport).filter(
-            SellReport.report_date < report_date
-        ).order_by(SellReport.report_date.desc()).first()
-        min_allowed_date = previous_sell_report.report_date if previous_sell_report else report_date
+        base_report_date, _ = _get_sell_finance_base_date(db, report_date)
+        min_allowed_date = base_report_date or report_date
 
         finance = db.query(SellFinance).filter(
             SellFinance.report_date == report_date
@@ -375,6 +385,9 @@ def sell_finance_overview():
         ).scalar() or 0.0)
         total_tcs_all = float(db.query(
             func.coalesce(func.sum(InvoiceTotals.tcs), 0.0)
+        ).scalar() or 0.0)
+        total_Mrproundoff_all = float(db.query(
+            func.coalesce(func.sum(InvoiceTotals.mrp_round_off), 0.0)
         ).scalar() or 0.0)
         total_new_retailer_professional_tax_all = float(db.query(
             func.coalesce(func.sum(InvoiceTotals.new_retailer_professional_tax), 0.0)
@@ -506,6 +519,7 @@ def sell_finance_overview():
                 "all_invoices_net_invoice_value": total_net_invoice_value_all,
                 "all_invoices_special_excise_cess": total_special_excise_cess_all,
                 "all_invoices_tcs": total_tcs_all,
+                "all_invoices_mrp_round_off": total_Mrproundoff_all,
                 "all_invoices_new_retailer_professional_tax": total_new_retailer_professional_tax_all,
                 "all_invoices_retail_shop_excise_turnover_tax": total_retail_shop_excise_turnover_tax_all,
                 "all_sell_amount": total_sell_amount_all
@@ -520,7 +534,7 @@ def sell_finance_overview():
                 "tcs": float(latest_invoice_totals.tcs or 0.0) if latest_invoice_totals else 0.0,
                 "new_retailer_professional_tax": float(latest_invoice_totals.new_retailer_professional_tax or 0.0) if latest_invoice_totals else 0.0,
                 "retail_shop_excise_turnover_tax": float(latest_invoice_totals.retail_shop_excise_turnover_tax or 0.0) if latest_invoice_totals else 0.0,
-                "total_invoice_value": total_invoice_value_all,
+                "total_invoice_value": latest_invoice_totals.total_invoice_value if latest_invoice_totals else 0.0,
                 "retailer_credit_balance": float(latest_invoice_totals.retailer_credit_balance or 0.0) if latest_invoice_totals else 0.0
             },
             "invoices": invoices_payload,

@@ -72,6 +72,7 @@ def _build_sales_history_map(db):
 def _predict_required_stock(row, sales_history):
     recent_reports = (sales_history or [])[:DEFAULT_PREDICTION_REPORTS]
     recent_sold_bottles = [_report_sold_bottles(report) for report in recent_reports]
+    all_sold_bottles = [_report_sold_bottles(report) for report in (sales_history or [])]
     latest_sold_bottles = recent_sold_bottles[0] if recent_sold_bottles else 0
     avg_recent_sold_bottles = (
         sum(recent_sold_bottles) / len(recent_sold_bottles)
@@ -94,9 +95,11 @@ def _predict_required_stock(row, sales_history):
     last_report_date = recent_reports[0].report_date if recent_reports else ""
     return {
         "reports_considered": len(recent_reports),
+        "total_reports": len(sales_history or []),
         "last_report_date": last_report_date,
         "latest_sold_bottles": latest_sold_bottles,
         "average_recent_sold_bottles": round(avg_recent_sold_bottles, 2),
+        "total_sold_bottles": sum(all_sold_bottles),
         "predicted_required_bottles": predicted_required_bottles,
         "predicted_required_cases": predicted_required_cases,
     }
@@ -145,6 +148,7 @@ def _stock_row_payload(row, prediction, high_cases):
         "last_sell_report_date": prediction.get("last_report_date", ""),
         "latest_sold_bottles": _safe_int(prediction.get("latest_sold_bottles")),
         "average_recent_sold_bottles": _safe_float(prediction.get("average_recent_sold_bottles")),
+        "total_sold_bottles": _safe_int(prediction.get("total_sold_bottles")),
         "required_stock_bottles": predicted_required_bottles,
         "required_stock_cases": predicted_required_cases,
         "predicted_required_bottles": predicted_required_bottles,
@@ -232,7 +236,24 @@ def build_analysis_overview(
             item["id"],
         ),
     )
-
+    top_selling_stock = sorted(
+        stock_payload,
+        key=lambda item: (
+            -_safe_int(item["total_sold_bottles"]),
+            -_safe_int(item["latest_sold_bottles"]),
+            item["brand_name"] or "",
+            item["id"],
+        ),
+    )[:DEFAULT_RECENT_LIMIT]
+    low_selling_stock = sorted(
+        stock_payload,
+        key=lambda item: (
+            _safe_int(item["total_sold_bottles"]),
+            _safe_int(item["latest_sold_bottles"]),
+            item["brand_name"] or "",
+            item["id"],
+        ),
+    )[:DEFAULT_RECENT_LIMIT]
     total_stock_bottles = sum(_safe_int(item["total_bottles"]) for item in stock_payload)
     total_stock_equivalent_cases = round(sum(_safe_float(item["equivalent_cases"]) for item in stock_payload), 2)
     total_required_stock_bottles = sum(_safe_int(item["required_stock_bottles"]) for item in stock_payload)
@@ -351,6 +372,8 @@ def build_analysis_overview(
             "low_stock": low_stock_sorted,
             "high_stock": high_stock_sorted,
             "zero_stock": zero_stock_sorted,
+            "top_selling_stock": top_selling_stock,
+            "low_selling_stock": low_selling_stock,
             "top_value_stock": top_value_stock,
         },
         "finance": {
