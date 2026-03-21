@@ -429,8 +429,8 @@ def set_sell_report_brand_alias():
         return {"error": "brand_number is required"}, 400
     if not short_name:
         return {"error": "short_name is required"}, 400
-    if len(short_name) > 20:
-        return {"error": "short_name max length is 20"}, 400
+    if len(short_name) > 60:
+        return {"error": "short_name max length is 60"}, 400
 
     db = SessionLocal()
     try:

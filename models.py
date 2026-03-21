@@ -244,6 +244,6 @@ class UserBrandAlias(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String, index=True)
     brand_number = Column(String, index=True)
-    short_name = Column(String(20))
+    short_name = Column(String(60))
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

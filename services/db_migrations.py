@@ -98,7 +98,7 @@ def ensure_user_brand_aliases_support(engine):
                     id INTEGER PRIMARY KEY,
                     username VARCHAR,
                     brand_number VARCHAR,
-                    short_name VARCHAR(20),
+                    short_name VARCHAR(60),
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     CONSTRAINT uq_user_brand_alias UNIQUE (username, brand_number)
