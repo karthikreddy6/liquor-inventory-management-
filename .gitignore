@@ -1,4 +1,8 @@
 invoices/
 output/
 inventory_management.db
+inventory.db-shm
+inventory.db-wal
+__pycache__/
+*.pyc
 requested_pdf/
