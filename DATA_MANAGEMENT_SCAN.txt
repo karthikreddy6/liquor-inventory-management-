@@ -1,0 +1,225 @@
+Inventory Management Data Management Scan
+=======================================
+
+Project Scope
+-------------
+This document describes how data is managed in this Flask + SQLAlchemy project located at:
+- C:\Users\karth\OneDrive\Desktop\inventory_management\apidjango
+
+Core Stack
+----------
+- API framework: Flask with Blueprints
+- ORM: SQLAlchemy ORM
+- Database: SQLite file `inventory.db`
+- Auth: Basic auth for admin + JWT for owner/supervisor
+- Storage extras: Filesystem folders for uploaded invoices and generated outputs
+
+Database Layer
+--------------
+1. Engine and session setup (`database.py`)
+- Uses `sqlite:///inventory.db`.
+- `check_same_thread=False` to allow multi-thread access from Flask app threads.
+- SQLite pragmas on connect:
+  - `journal_mode=WAL` for better read/write concurrency.
+  - `busy_timeout=30000` to wait up to 30s on DB lock contention.
+- `SessionLocal` is the per-request unit of work (autocommit=False, autoflush=False).
+
+2. Table creation and migration strategy (`create_db.py`, `services/db_migrations.py`)
+- Base schema created with `Base.metadata.create_all(bind=engine)`.
+- Manual migration helpers run at startup to patch existing SQLite files:
+  - Add missing columns to `invoice_totals`.
+  - Add `total_outside_income` and create `sell_finance_outside_income` if missing.
+  - Create user customization tables (`user_brand_aliases`, `user_brand_sort_preferences`) and indexes.
+- Migrations are idempotent and executed both in `create_db.py` and app startup (`app.py`).
+
+Domain Data Model (Main Tables)
+--------------------------------
+Invoice ingestion and stock:
+- `invoices`: invoice header metadata, uploader info, invoice_date as string.
+- `invoice_totals`: monetary totals keyed by `invoice_number`.
+- `invoice_items`: per-line product quantities and rates.
+- `present_stock_details`: current live stock snapshot by brand + pack size.
+- `stock_summary`: denormalized global totals.
+
+Sales and finance:
+- `sell_reports`: daily/period sell snapshot by stock item with opening/addition/closing/sold values.
+- `sell_finance`: finance summary per report date (unique by report_date).
+- `sell_finance_expenses`, `sell_finance_phonepay`, `sell_finance_cash`, `sell_finance_outside_income`: detail child rows.
+
+Master/reference and user personalization:
+- `price_list`: MRP reference with unique constraint on (brand_number, size_code, pack_type, volume_ml).
+- `user_brand_sort_preferences`: per-user custom brand order.
+- `user_brand_aliases`: per-user short brand names.
+
+Audit and activity:
+- `audit_logs`: action logs (user, role, entity, details).
+- `user_logins`: tracks last login by username.
+
+Primary Data Management Flows
+-----------------------------
+1. Invoice upload -> normalized persistence -> stock mutation (`routes/upload.py`)
+- Upload/preview parses PDF via `parse_invoice_pdf`.
+- Validates retailer code must be `2500552`.
+- Prevents invoice date from being <= latest sell report date.
+- On real upload:
+  - Stores invoice file to filesystem.
+  - Inserts `Invoice` and `InvoiceTotals`.
+  - Inserts each `InvoiceItem`.
+  - Updates/inserts `PresentStockDetail` per item key:
+    - Adds delivered cases and bottles.
+    - Derives amount using MRP from `price_list` when available.
+  - Updates denormalized `StockSummary` incrementally.
+  - Writes audit log and commits once.
+
+2. Sell report preparation and creation (`routes/sell_report.py`)
+- Preparation endpoint computes opening stock + invoice additions using helper logic in `services/sales_utils.py`.
+- Supports report_date-aware calculations and user-specific brand sorting/aliases.
+- Creation endpoint:
+  - Validates report_date is on/after a base date (last sell report date or first invoice date).
+  - Blocks duplicate report per date.
+  - Computes sold quantities as (opening + additions - closing).
+  - Updates `SellReport` rows and mutates `PresentStockDetail` to closing balance.
+  - Recalculates `stock_summary` from live stock rows.
+  - Logs audit and commits.
+
+3. Edit last sell report (`routes/sell_report.py`)
+- Only owner role.
+- Allows single edit pass (enforced using `edit_count > 0`).
+- Recomputes opening/additions from previous report chain.
+- Updates report and stock snapshots, then recomputes summary and commits.
+
+4. Sell finance creation and preparation (`routes/sell_finance.py`)
+- Validates report_date, existence of sell report for date, and date windows.
+- Accepts transactional entries arrays for phonepay/cash and normalizes/validates dates + amounts.
+- Supports backward compatibility with scalar `upi_phonepay` / `cash` fields.
+- Computes:
+  - `total_amount = total_sell_amount + last_balance_amount`
+  - `total_balance = (upi_phonepay + cash) - total_amount`
+  - `final_balance = total_balance + total_outside_income - total_expenses`
+- Upsert pattern:
+  - If existing finance row: overwrite summary fields and hard-delete old child entries, then insert new child entries.
+  - Else insert parent + child rows.
+- Commits once and logs audit.
+
+Supporting Service Logic
+------------------------
+1. `services/sales_utils.py`
+- Shared computation/validation utility layer:
+  - Date parsing across allowed formats.
+  - Invoice date bounds (first/latest invoice).
+  - Last report lookup per stock.
+  - Computation of opening/additions/total bottles.
+  - Build MRP map from price list.
+  - Finance payload assembly and amount normalization.
+- This module is central for avoiding duplicated financial and stock math.
+
+2. `services/stock_service.py`
+- `recalc_stock_summary(db)` recalculates denormalized summary from all stock rows.
+- Used after sell report mutations.
+
+3. `services/audit.py`
+- `log_action` inserts audit log rows.
+- `update_last_login` upserts login activity.
+
+4. `services/analysis_service.py`
+- Read-heavy aggregation and prediction layer.
+- Combines stock, sell report history, invoice totals, and finance into overview payloads.
+- Computes predicted required stock from recent sales trend, stock levels, shortage/excess, KPI summaries.
+
+Authentication and Data Access Controls
+---------------------------------------
+- Admin: HTTP Basic credentials from config.
+- Staff: JWT bearer token with role checks.
+- Role-based restrictions on write endpoints:
+  - Sell report create: supervisor.
+  - Sell report edit-last: owner.
+- Many GET/POST endpoints require auth decorator; identity is attached as `request.user`.
+- Audit logs capture actor identity on key write operations.
+
+Transactional Pattern
+---------------------
+- Common pattern per route:
+  - `db = SessionLocal()`
+  - perform reads/writes
+  - `db.commit()` on success for write flows
+  - `db.close()` in `finally`
+- Some routes rely on early return paths without explicit rollback; SQLAlchemy session close will discard uncommitted state, but explicit rollback on errors is only used in some admin paths.
+
+Denormalization and Derived Data
+--------------------------------
+- `stock_summary` stores aggregate totals for faster response.
+- `present_stock_details.total_amount` is derived from stock quantities and rates (not always source-of-truth from invoice totals).
+- Sell report rows persist both component fields and computed fields (sold cases/bottles/amount), enabling historical snapshots.
+
+File System Data Management
+---------------------------
+- Invoices saved under configured folder (`INVOICES_FOLDER`) via `services/files.py`.
+- Generated artifacts:
+  - JSON sell report snapshots under `output/`.
+  - PDFs under `requested_pdf/` (stock and other reports).
+- Temporary preview upload path under `output/preview` with cleanup attempt.
+
+Important Observations
+----------------------
+1. Route duplication / legacy overlap
+- `routes/sales.py` and `routes/sell_report.py`/`routes/sell_finance.py` contain overlapping business logic.
+- In `app.py`, only `sell_report_bp` and `sell_finance_bp` are registered (not `sales_bp`), so some code appears legacy or transitional.
+
+2. Date storage type
+- Many date fields are stored as `String` (invoice_date, report_date, txn_date).
+- Logic depends on parsing string dates in multiple formats; this increases validation complexity and risk of malformed historical data.
+
+3. Relationship modeling
+- Child tables reference parent IDs but do not use explicit SQLAlchemy foreign key constraints or ORM relationships.
+- Integrity is maintained in application code rather than DB-enforced referential constraints.
+
+4. Migration approach
+- Lightweight SQL text migrations are practical for SQLite, but there is no versioned migration history table.
+- Schema drift control is handled by startup checks.
+
+5. Error handling consistency
+- Some routes include explicit rollback in exception paths; others rely on session close and early returns.
+- A uniform transaction helper/middleware could improve consistency.
+
+Data Lifecycle Summary
+----------------------
+1. Source ingestion:
+- PDF invoice parsed -> normalized DB rows inserted.
+
+2. Operational stock state:
+- Live stock mutated on every invoice upload and sell report creation/edit.
+
+3. Historical accounting:
+- Sell reports preserve periodic stock movement and sale values.
+- Finance records preserve cash/UPI/expense/outside-income details per date.
+
+4. Analytics:
+- Analysis service builds higher-level operational intelligence from persisted history.
+
+5. Traceability:
+- Audit logs and user login records maintain actor/event trace.
+
+Recommended Next Hardening Steps
+--------------------------------
+1. Consolidate duplicate logic
+- Remove or archive `routes/sales.py` if unused.
+- Keep one authoritative path for sell-report and finance rules.
+
+2. Standardize date fields
+- Migrate critical date columns to ISO-only string or proper `Date`/`DateTime` columns.
+- Enforce strict API date format (`YYYY-MM-DD`).
+
+3. Add stronger DB constraints
+- Introduce foreign keys for child finance tables and invoice-linked tables where practical.
+- Consider composite uniqueness on stock identity fields if business rules require strict uniqueness.
+
+4. Centralize transaction and error policy
+- Add consistent rollback on exceptions for all write endpoints.
+- Consider a shared service layer wrapping unit-of-work boundaries.
+
+5. Add tests around core invariants
+- Invoice upload idempotency/duplicate behavior.
+- Sell report stock math (opening + additions - closing).
+- Finance balance equations and date-window validation.
+
+End of report.

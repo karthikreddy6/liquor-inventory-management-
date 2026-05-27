@@ -18,7 +18,12 @@ from services.db_migrations import (
 )
 
 app = Flask(__name__)
-CORS(app)
+# This allows the Android App (capacitor://localhost) to talk to your server
+CORS(app, resources={r"/*": {
+    "origins": ["capacitor://localhost", "http://localhost"],
+    "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    "allow_headers": ["Content-Type", "Authorization"]
+}})
 
 ensure_invoice_totals_tax_columns(engine)
 ensure_sell_finance_outside_income_support(engine)
