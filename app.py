@@ -18,11 +18,12 @@ from services.db_migrations import (
 )
 
 app = Flask(__name__)
-# This allows the Android App (capacitor://localhost) to talk to your server
+# This is the "Nuclear Option" for CORS. It allows everything.
 CORS(app, resources={r"/*": {
-    "origins": ["capacitor://localhost", "http://localhost"],
+    "origins": "*",
     "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    "allow_headers": ["Content-Type", "Authorization"]
+    "allow_headers": ["*"],
+    "expose_headers": ["*"]
 }})
 
 ensure_invoice_totals_tax_columns(engine)
