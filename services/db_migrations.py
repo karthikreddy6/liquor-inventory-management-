@@ -113,3 +113,20 @@ def ensure_user_brand_aliases_support(engine):
             "CREATE INDEX IF NOT EXISTS ix_user_brand_aliases_brand_number "
             "ON user_brand_aliases (brand_number)"
         ))
+
+
+def ensure_user_logins_support(engine):
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS user_logins (
+                id INTEGER PRIMARY KEY,
+                username VARCHAR UNIQUE,
+                role VARCHAR,
+                last_login_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_user_logins_username "
+            "ON user_logins (username)"
+        ))
