@@ -1,7 +1,8 @@
 from flask import Flask
 from flask_cors import CORS
 
-from database import engine
+import models  # noqa: F401
+from database import Base, engine
 from routes.upload import upload_bp
 from routes.stock import stock_bp
 from routes.admin import admin_bp
@@ -26,6 +27,7 @@ CORS(app, resources={r"/*": {
     "expose_headers": ["*"]
 }})
 
+Base.metadata.create_all(bind=engine)
 ensure_invoice_totals_tax_columns(engine)
 ensure_sell_finance_outside_income_support(engine)
 ensure_user_brand_aliases_support(engine)
